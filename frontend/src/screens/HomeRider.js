@@ -28,6 +28,11 @@ import {
 const MenuIcon = require("../../assets/ic_menu.png");
 const BellIcon = require("../../assets/bell.png");
 
+// NEW ICONS (replace emojis)
+const HomeIcon = require("../../assets/home.png");
+const ScheduleIcon = require("../../assets/schedule.png");
+const UserIcon = require("../../assets/user.png");
+
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function HomeRider({ navigation }) {
@@ -45,33 +50,23 @@ export default function HomeRider({ navigation }) {
   const auth = getAuth();
   const db = getFirestore();
 
-  // Google Maps Embed HTML
   const BINAN_MAPS_EMBED = `
   <html>
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        body, html {
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-        }
-        iframe {
-          width: 100%;
-          height: 100%;
-          border: none;
-        }
+        body, html { margin: 0; padding: 0; overflow: hidden; }
+        iframe { width: 100%; height: 100%; border: none; }
       </style>
     </head>
     <body>
       <iframe 
-        src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d61856.07421696857!2d121.03201051994674!3d14.311163205767722!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397d70cc905e489%3A0xdbb7938dd87f5563!2zQmnDsWFuLCBMYWd1bmE!5e0!3m2!1sen!2sph!4v1764121213329!5m2!1sen!2sph" 
+        src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d61856.07421696857!2d121.03201051994674!3d14.311163205767722!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397d70cc905e489%3A0xdbb7938dd87f5563!2zQmnDsWFuLCBMYWd1bmE!5e0!3m2!1sen!2sph!4v1764121213329!5m2!1sen!2sph"
         width="100%" 
         height="100%" 
         style="border:0;" 
         allowfullscreen="" 
-        loading="lazy" 
-        referrerpolicy="no-referrer-when-downgrade">
+        loading="lazy">
       </iframe>
     </body>
   </html>
@@ -112,7 +107,6 @@ export default function HomeRider({ navigation }) {
             : new Date().toLocaleDateString()
         }));
         
-        // If no news found, keep the default welcome message
         if (newsList.length > 0) {
           setNewsUpdates(newsList);
         }
@@ -124,19 +118,17 @@ export default function HomeRider({ navigation }) {
     fetchUserData();
     fetchNewsUpdates();
 
-    // News rotation timer
     const newsRotationTimer = setInterval(() => {
       setCurrentNewsIndex((prevIndex) => 
         newsUpdates.length > 1 
           ? (prevIndex + 1) % newsUpdates.length 
           : 0
       );
-    }, 5000); // Change news every 5 seconds
+    }, 5000);
 
     return () => clearInterval(newsRotationTimer);
   }, []);
 
-  // Add a safe method to get current news
   const getCurrentNews = () => {
     return newsUpdates[currentNewsIndex] || {
       headline: "Welcome to AIDE",
@@ -156,6 +148,7 @@ export default function HomeRider({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      
       {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>AIDE</Text>
@@ -168,26 +161,19 @@ export default function HomeRider({ navigation }) {
         </Pressable>
       </View>
 
-      <ScrollView 
-        style={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Greeting Section */}
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        
+        {/* Greeting */}
         <View style={styles.greetingSection}>
           <Text style={styles.welcomeText}>
             Welcome, {userData?.firstName || 'Rider'}
           </Text>
-          <Text style={styles.subtitleText}>
-            Your journey starts here
-          </Text>
+          <Text style={styles.subtitleText}>Your journey starts here</Text>
         </View>
 
         {/* Quick Actions */}
         <View style={styles.quickActionsContainer}>
-          <TouchableOpacity 
-            style={styles.quickActionButton} 
-            onPress={handleWhatsNew}
-          >
+          <TouchableOpacity style={styles.quickActionButton} onPress={handleWhatsNew}>
             <Text style={styles.quickActionText}>What's New</Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -198,16 +184,14 @@ export default function HomeRider({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Map Preview Section */}
+        {/* Map */}
         <View style={styles.mapPreviewContainer}>
           <View style={styles.mapPreviewHeader}>
             <Text style={styles.mapPreviewTitle}>Green Routes in Binan</Text>
+
             <TouchableOpacity 
               style={styles.openMapButton}
-              onPress={() => {
-                console.log("Attempting to navigate to GreenRouteMap");
-                navigation.navigate('GreenRouteMap');
-              }}
+              onPress={() => navigation.navigate('GreenRouteMap')}
             >
               <Text style={styles.openMapText}>Open Full Map</Text>
             </TouchableOpacity>
@@ -224,30 +208,28 @@ export default function HomeRider({ navigation }) {
           </View>
         </View>
 
-        {/* News Updates */}
+        {/* News */}
         <View style={styles.newsContainer}>
           <Text style={styles.newsSectionTitle}>Latest Updates</Text>
           <View style={styles.newsCard}>
-            <Text style={styles.newsHeadline}>
-              {getCurrentNews().headline}
-            </Text>
-            <Text style={styles.newsDetails}>
-              {getCurrentNews().details}
-            </Text>
-            <Text style={styles.newsDate}>
-              {getCurrentNews().createdAt}
-            </Text>
+            <Text style={styles.newsHeadline}>{getCurrentNews().headline}</Text>
+            <Text style={styles.newsDetails}>{getCurrentNews().details}</Text>
+            <Text style={styles.newsDate}>{getCurrentNews().createdAt}</Text>
           </View>
         </View>
+
       </ScrollView>
 
-      {/* Bottom Navigation */}
+      {/* ------------------------------------------------ */}
+      {/* UPDATED BOTTOM NAVIGATION WITH PNG ICONS          */}
+      {/* ------------------------------------------------ */}
       <View style={styles.bottomNavigation}>
+        
         <TouchableOpacity 
           style={styles.navItem}
           onPress={() => navigation.navigate('HomeRider')}
         >
-          <Text style={styles.navIcon}>🏠</Text>
+          <Image source={HomeIcon} style={styles.navIconImg} />
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
 
@@ -255,7 +237,7 @@ export default function HomeRider({ navigation }) {
           style={styles.navItem}
           onPress={() => navigation.navigate('Appointment')}
         >
-          <Text style={styles.navIcon}>📅</Text>
+          <Image source={ScheduleIcon} style={styles.navIconImg} />
           <Text style={styles.navLabel}>Appointment</Text>
         </TouchableOpacity>
 
@@ -263,19 +245,18 @@ export default function HomeRider({ navigation }) {
           style={styles.navItem}
           onPress={() => navigation.navigate('Me')}
         >
-          <Text style={styles.navIcon}>👤</Text>
+          <Image source={UserIcon} style={styles.navIconImg} />
           <Text style={styles.navLabel}>Me</Text>
         </TouchableOpacity>
+
       </View>
+
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF'
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -291,11 +272,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2E7D32'
   },
-  headerIcon: {
-    width: 24,
-    height: 24,
-    tintColor: '#2E7D32'
+  headerIcon: { width: 24, height: 24, tintColor: '#2E7D32' },
+
+  greetingSection: { paddingHorizontal: 20, paddingVertical: 15 },
+  welcomeText: { fontSize: 22, fontWeight: '600', color: '#2E7D32' },
+  subtitleText: { color: 'gray', marginTop: 5 },
+
+  quickActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginVertical: 10
   },
+  quickActionButton: {
+    backgroundColor: '#2E7D32',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10
+  },
+  quickActionText: { color: 'white' },
+
   mapPreviewContainer: {
     backgroundColor: '#F5F5F5',
     marginHorizontal: 20,
@@ -314,86 +310,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2E7D32'
   },
-  mapPreviewLink: {
-    color: '#2E7D32',
-    fontWeight: '600'
+  mapWrapper: { height: 250, width: '100%' },
+  webview: { flex: 1 },
+
+  newsContainer: { paddingHorizontal: 20, marginVertical: 15 },
+  newsSectionTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 10, 
+    color: '#2E7D32' 
   },
-  mapWrapper: {
-    height: 250,
-    width: '100%'
-  },
-  webview: {
-    flex: 1
-  },
-  greetingSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 15
-  },
-  welcomeText: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#2E7D32'
-  },
-  subtitleText: {
-    color: 'gray',
-    marginTop: 5
-  },
-  quickActionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginVertical: 10
-  },
-  quickActionButton: {
-    backgroundColor: '#2E7D32',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10
-  },
-  quickActionText: {
-    color: 'white'
-  },
-  newsContainer: {
-    paddingHorizontal: 20,
-    marginVertical: 15
-  },
-  newsSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
-    color: '#2E7D32'
-  },
-  newsCard: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    padding: 15
-  },
-  newsHeadline: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 5
-  },
-  newsDetails: {
-    color: '#757575',
-    marginBottom: 10
-  },
-  newsDate: {
-    color: '#9E9E9E',
-    fontSize: 12,
-    alignSelf: 'flex-end'
-  },
+  newsCard: { backgroundColor: '#F5F5F5', borderRadius: 10, padding: 15 },
+  newsHeadline: { fontSize: 16, fontWeight: '600', marginBottom: 5 },
+  newsDetails: { color: '#757575', marginBottom: 10 },
+  newsDate: { color: '#9E9E9E', fontSize: 12, alignSelf: 'flex-end' },
+
   bottomNavigation: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     backgroundColor: '#2E7D32',
     paddingVertical: 10
   },
-  navItem: {
-    alignItems: 'center'
+  navItem: { alignItems: 'center' },
+
+  // NEW ICON STYLE
+  navIconImg: {
+    width: 24,
+    height: 24,
+    tintColor: "white"
   },
-  navIcon: {
-    fontSize: 20
-  },
+
   navLabel: {
     color: 'white',
     fontSize: 12,
