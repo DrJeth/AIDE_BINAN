@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
-  Image,
   Pressable,
 } from "react-native";
 
@@ -47,34 +46,26 @@ City Ordinance No. 21-(2023) dated September 4, 2023
 
   return (
     <SafeAreaView style={styles.screen}>
-      {/* Header */}
+      {/* ================= HEADER (same as Definition2 & 3) ================= */}
       <View style={styles.headerGreen}>
-        {/* left emblem */}
-        <Image
-          source={require("../../assets/top-emblem.png")}
-          style={styles.leftIcon}
-          resizeMode="contain"
-        />
-
-        <Text style={styles.title}>Definition of Terms</Text>
-
-        {/* right emblem (back to Ordinance) */}
-        <Pressable onPress={handleBack} style={styles.rightIconWrap}>
-          <Image
-            source={require("../../assets/top-emblem.png")}
-            style={styles.rightIcon}
-            resizeMode="contain"
-          />
+        <Pressable
+          onPress={handleBack}
+          style={styles.backCircle}
+          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+        >
+          <Text style={styles.backIcon}>‹</Text>
         </Pressable>
+
+        <Text style={styles.headerTitle}>Definition of Terms</Text>
       </View>
 
-      {/* Content */}
+      {/* ================= CONTENT ================= */}
       <ScrollView
         contentContainerStyle={styles.scrollArea}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-          <View style={styles.cardTopAccent} />
+          {/* removed green accent shape */}
 
           <Text style={styles.body}>
             {bodyText.split("\n\n").map((p, i) => (
@@ -92,7 +83,7 @@ City Ordinance No. 21-(2023) dated September 4, 2023
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Next button (center-bottom) */}
+      {/* Next button */}
       <Pressable
         onPress={() => navigation.navigate("Definition2")}
         style={styles.nextButton}
@@ -106,74 +97,69 @@ City Ordinance No. 21-(2023) dated September 4, 2023
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#fefefe",
+    backgroundColor: "#f4f4f4",
     alignItems: "center",
   },
 
   headerGreen: {
-    width: "100%",
-    height: 150,
-    backgroundColor: "#2e7d32",
-    justifyContent: "center",
-    alignItems: "center",
     position: "absolute",
     top: 0,
-    zIndex: 1,
-  },
-
-  leftIcon: {
-    position: "absolute",
-    left: 15,
-    top: 18,
-    width: 34,
-    height: 34,
-  },
-
-  rightIconWrap: {
-    position: "absolute",
-    right: 15,
-    top: 18,
-    width: 40,
-    height: 40,
+    left: 0,
+    right: 0,
+    height: 96,
+    backgroundColor: "#2e7d32",
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
     justifyContent: "center",
     alignItems: "center",
+    paddingTop: 18,
+    zIndex: 10,
   },
 
-  rightIcon: {
+  backCircle: {
+    position: "absolute",
+    left: 16,
+    top: 35,
     width: 34,
     height: 34,
+    borderRadius: 17,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
   },
 
-  title: {
-    color: "#fff",
+  backIcon: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#2e7d32",
+  },
+
+  headerTitle: {
+    marginTop: 8,
+    color: "#ffffff",
     fontWeight: "700",
     fontSize: 20,
-    textAlign: "center",
   },
 
   scrollArea: {
-    paddingTop: 110,
+    paddingTop: 130,
     alignItems: "center",
     paddingHorizontal: 12,
   },
 
   card: {
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
     paddingHorizontal: 18,
     paddingVertical: 20,
     elevation: 6,
-  },
-
-  cardTopAccent: {
-    position: "absolute",
-    left: -36,
-    top: -30,
-    width: 120,
-    height: 120,
-    backgroundColor: "#2e7d32",
-    borderRadius: 70,
-    zIndex: -1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    position: "relative",
+    overflow: "hidden",
   },
 
   body: { width: "100%" },
@@ -190,11 +176,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  /* NEXT button (light green) */
   nextButton: {
     position: "absolute",
     bottom: 25,
-    alignSelf: "center",
     backgroundColor: "#66bb6a",
     paddingVertical: 12,
     paddingHorizontal: 40,

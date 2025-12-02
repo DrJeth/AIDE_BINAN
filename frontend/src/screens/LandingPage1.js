@@ -6,7 +6,7 @@ import {
   ImageBackground
 } from 'react-native';
 
-import bgImage from "../../assets/Landingg.png";
+import bgImage from "../../assets/LandingPage1.png";
 
 function LandingPage1({ navigation }) {
   return (
