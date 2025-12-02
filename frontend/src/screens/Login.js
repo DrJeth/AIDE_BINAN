@@ -44,6 +44,9 @@ export default function Login({ navigation }) {
   const [registrationModalVisible, setRegistrationModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
+  // NEW: show/hide password
+  const [showPassword, setShowPassword] = useState(false);
+  
   // Email verification states
   const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
@@ -497,15 +500,32 @@ export default function Login({ navigation }) {
               />
 
               <Text style={[styles.label, { marginTop: 8 }]}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your password"
-                placeholderTextColor="#9b9b9b"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                editable={!isLoading}
-              />
+              <View style={{ position: "relative" }}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#9b9b9b"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!isLoading}
+                />
+
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: "absolute",
+                    right: 14,
+                    top: 14,
+                    padding: 4,
+                  }}
+                  disabled={isLoading}
+                >
+                  <Text style={{ color: "#2e7d32", fontWeight: "700" }}>
+                    {showPassword ? "Hide" : "Show"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
