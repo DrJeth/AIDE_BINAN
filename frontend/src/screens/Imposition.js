@@ -7,25 +7,53 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
-  Image,
+  Pressable,
 } from "react-native";
 
 const { width: WINDOW_W } = Dimensions.get("window");
 const CARD_W = Math.min(330, WINDOW_W - 56); // keeps the narrow column look
+const GREEN = "#2e7d32";
 
-export default function ImpositionFee() {
+export default function ImpositionFee({ navigation }) {
+  const body = `
+SECTION 6. Imposition of Fee.
+
+There shall be collected from the owner of an Electric Vehicle operating within the City of Biñan, the following fees:
+
+Fees for Privately-Owned E-Bike
+a. Registration Fee for New / Renewal - P 100.00
+b. Permit or License Fee - P 150.00
+c. Metal Plate (One Time Payment) - P 300.00
+d. Sticker (For Validation every Year) - P 50.00
+
+Fees for E-Bike for Hire
+a. Registration Fee for New / Renewal - P 200.00
+b. Permit or License Fee - P 150.00
+c. Metal Plate (One Time Payment) - P 300.00
+d. Sticker (For Validation every Year) - P 50.00
+
+E-Vehicles under Category L3 (e-Motorcycle) and Category L4 & L5 (e-Tricycle / Three Wheeled Vehicle) shall comply with LTO AO 039-2021 and are required to secure an LTO Driver's License and are subject to limited roads (Barangay and Local Roads). They are also authorized to be used privately or "for hire".
+
+City Ordinance No. 21-(2023) dated September 4, 2023
+  `.trim();
+
+  const handleBack = () => {
+    if (navigation?.goBack) navigation.goBack();
+    else if (navigation?.navigate) navigation.navigate("Ordinance");
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
-      {/* header green curved bar */}
-      <View style={styles.headerWrap}>
-        {/* small left circular back — uncomment and replace with your asset if you have one */}
-        {/*
-        <Image
-          source={require("../../assets/back-circle.png")}
-          style={styles.backIcon}
-          resizeMode="contain"
-        />
-        */}
+      {/* HEADER same as Definition screens */}
+      <View style={styles.headerGreen}>
+        <Pressable
+          onPress={handleBack}
+          style={styles.backCircle}
+          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+        >
+          <Text style={styles.backIcon}>‹</Text>
+        </Pressable>
+
         <Text style={styles.headerTitle}>Imposition Fee</Text>
       </View>
 
@@ -34,8 +62,7 @@ export default function ImpositionFee() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-          {/* right-side green vertical accent */}
-          <View style={styles.rightAccent} />
+          {/* rightAccent REMOVED */}
 
           <Text style={styles.sectionHeading}>SECTION 6. Imposition of Fee.</Text>
 
@@ -46,7 +73,6 @@ export default function ImpositionFee() {
           {/* Fees for Privately-Owned E-Bike */}
           <Text style={styles.subHeading}>Fees for Privately-Owned E-Bike</Text>
 
-          {/* two-column table-like view (label left, price right) */}
           <View style={styles.table}>
             <View style={styles.colLeft}>
               <Text style={styles.tableItem}>a. Registration Fee for New / Renewal</Text>
@@ -64,7 +90,9 @@ export default function ImpositionFee() {
           </View>
 
           {/* Fees for E-Bike for Hire */}
-          <Text style={[styles.subHeading, { marginTop: 18 }]}>Fees for E-Bike for Hire</Text>
+          <Text style={[styles.subHeading, { marginTop: 18 }]}>
+            Fees for E-Bike for Hire
+          </Text>
 
           <View style={styles.table}>
             <View style={styles.colLeft}>
@@ -96,41 +124,54 @@ export default function ImpositionFee() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#fefefe",
+    backgroundColor: "#f4f4f4",
     alignItems: "center",
   },
 
-  headerWrap: {
+  /* HEADER like Definition1/2/3 */
+  headerGreen: {
     position: "absolute",
-    top: 10,
-    left: 12,
-    right: 12,
-    height: 64,
-    backgroundColor: "#2e7d32",
-    borderRadius: 16,
-    alignItems: "center",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 96,
+    backgroundColor: GREEN,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
     justifyContent: "center",
-    zIndex: 3,
-    paddingHorizontal: 12,
+    alignItems: "center",
+    paddingTop: 18,
+    zIndex: 10,
+  },
+
+  backCircle: {
+    position: "absolute",
+    left: 16,
+    top: 35,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
   },
 
   backIcon: {
-    position: "absolute",
-    left: 8,
-    top: 12,
-    width: 32,
-    height: 32,
+    fontSize: 18,
+    fontWeight: "900",
+    color: GREEN,
   },
 
   headerTitle: {
+    marginTop: 8,
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
-    fontFamily: "Karma-Bold",
   },
 
   scrollArea: {
-    paddingTop: 64, // pushes the card down so it overlaps header like screenshot
+    paddingTop: 130,
     alignItems: "center",
     paddingHorizontal: 12,
     paddingBottom: 24,
@@ -143,24 +184,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: "flex-start",
     position: "relative",
-    // shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 6,
     overflow: "hidden",
-  },
-
-  rightAccent: {
-    position: "absolute",
-    right: -20,
-    bottom: -20,
-    width: 60,
-    height: 180,
-    backgroundColor: "#2e7d32",
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
   },
 
   sectionHeading: {
@@ -226,5 +255,3 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 });
-
-
