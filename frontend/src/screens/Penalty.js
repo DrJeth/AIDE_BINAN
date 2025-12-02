@@ -6,14 +6,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   Dimensions,
+  Pressable,
 } from "react-native";
 
 const { width: WINDOW_W } = Dimensions.get("window");
-const CARD_W = Math.min(320, WINDOW_W - 48); // narrow column similar to screenshot
+const CARD_W = Math.min(320, WINDOW_W - 48);
 
-export default function Penalty() {
+export default function Penalty({ navigation }) {
   const body = `
 Any person found riding an unregistered E-Bike or E-Scooters shall be punished with the following fines:
 
@@ -38,10 +38,23 @@ Non-residents of the City of Biñan who shall pass the city's road and will freq
 Penalty for Distributor / Marketing who failed to comply hereto:
   `.trim();
 
+  const handleBack = () => {
+    if (navigation?.goBack) navigation.goBack();
+    else if (navigation?.navigate) navigation.navigate("Ordinance");
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
-      {/* Green curved header */}
-      <View style={styles.header}>
+      {/* SAME HEADER AS DEFINITION2 */}
+      <View style={styles.headerGreen}>
+        <Pressable
+          onPress={handleBack}
+          style={styles.backCircle}
+          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+        >
+          <Text style={styles.backIcon}>‹</Text>
+        </Pressable>
+
         <Text style={styles.headerTitle}>Penalty</Text>
       </View>
 
@@ -50,8 +63,7 @@ Penalty for Distributor / Marketing who failed to comply hereto:
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-          {/* green circle accent */}
-          <View style={styles.cardAccent} />
+          {/* REMOVED green circle accent */}
 
           <Text style={styles.bodyText}>
             {body.split("\n\n").map((para, idx) => (
@@ -73,35 +85,59 @@ Penalty for Distributor / Marketing who failed to comply hereto:
   );
 }
 
+const GREEN = "#2e7d32";
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#111111",
+    backgroundColor: "#f4f4f4",
     alignItems: "center",
   },
 
-  header: {
+  /* SAME HEADER AS DEFINITION2 */
+  headerGreen: {
     position: "absolute",
-    top: 10,
-    left: 12,
-    right: 12,
-    height: 64,
-    backgroundColor: "#2e7d32",
-    borderRadius: 14,
-    alignItems: "center",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 96,
+    backgroundColor: GREEN,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
     justifyContent: "center",
-    zIndex: 3,
-    paddingHorizontal: 12,
+    alignItems: "center",
+    paddingTop: 18,
+    zIndex: 10,
   },
-  headerTitle: {
-    color: "#fff",
+
+  backCircle: {
+    position: "absolute",
+    left: 16,
+    top: 35,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
+  },
+
+  backIcon: {
     fontSize: 18,
-    fontFamily: "Karma-Bold",
+    fontWeight: "900",
+    color: GREEN,
+  },
+
+  headerTitle: {
+    marginTop: 8,
+    color: "#fff",
+    fontSize: 20,
     fontWeight: "700",
   },
 
   scrollArea: {
-    paddingTop: 56,
+    paddingTop: 130,
     alignItems: "center",
     paddingHorizontal: 12,
     paddingBottom: 24,
@@ -121,21 +157,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
 
-  cardAccent: {
-    position: "absolute",
-    left: -36,
-    top: -30,
-    width: 110,
-    height: 110,
-    backgroundColor: "#2e7d32",
-    borderRadius: 64,
-    zIndex: 0,
-  },
-
   bodyText: {
     width: "100%",
     color: "#111",
-    zIndex: 1,
   },
 
   paragraph: {
