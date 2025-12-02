@@ -290,6 +290,7 @@ function RegisterRider({ navigation }) {
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Personal Information</Text>
       
+      <Text style={styles.fieldLabel}>First Name</Text>
       <TextInput
         style={styles.input}
         placeholder="First Name"
@@ -299,6 +300,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Last Name</Text>
       <TextInput
         style={styles.input}
         placeholder="Last Name"
@@ -308,6 +310,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Birthday</Text>
       <TouchableOpacity 
         style={styles.input} 
         onPress={() => !loading && setShowDatePicker(true)}
@@ -346,6 +349,7 @@ function RegisterRider({ navigation }) {
         />
       )}
       
+      <Text style={styles.fieldLabel}>Contact Number</Text>
       <TextInput
         style={styles.input}
         placeholder="Contact Number (10-11 digits)"
@@ -357,6 +361,7 @@ function RegisterRider({ navigation }) {
         maxLength={11}
       />
       
+      <Text style={styles.fieldLabel}>Address</Text>
       <TextInput
         style={styles.input}
         placeholder="Address"
@@ -374,6 +379,7 @@ function RegisterRider({ navigation }) {
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>E-Bike Information</Text>
       
+      <Text style={styles.fieldLabel}>E-Bike Brand</Text>
       <TextInput
         style={styles.input}
         placeholder="E-Bike Brand"
@@ -383,6 +389,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Model Unit</Text>
       <TextInput
         style={styles.input}
         placeholder="Model Unit"
@@ -392,6 +399,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>E-Bike Color</Text>
       <TextInput
         style={styles.input}
         placeholder="E-Bike Color"
@@ -401,6 +409,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Chassis/Motor Number</Text>
       <View>
         <TextInput
           style={styles.input}
@@ -415,6 +424,7 @@ function RegisterRider({ navigation }) {
         </Text>
       </View>
       
+      <Text style={styles.fieldLabel}>Branch</Text>
       <TextInput
         style={styles.input}
         placeholder="Branch (Store where purchased)"
@@ -424,6 +434,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Plate Number</Text>
       <View>
         <TextInput
           style={styles.input}
@@ -439,6 +450,7 @@ function RegisterRider({ navigation }) {
         </Text>
       </View>
       
+      <Text style={styles.fieldLabel}>Email</Text>
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -450,6 +462,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Password</Text>
       <TextInput
         style={styles.input}
         placeholder="Password (min 6 characters)"
@@ -460,6 +473,7 @@ function RegisterRider({ navigation }) {
         editable={!loading}
       />
       
+      <Text style={styles.fieldLabel}>Confirm Password</Text>
       <TextInput
         style={styles.input}
         placeholder="Confirm Password"
@@ -571,6 +585,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 10,
     color: '#333'
+  },
+  // NEW: labels above inputs
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4
   },
   input: {
     borderWidth: 1,
