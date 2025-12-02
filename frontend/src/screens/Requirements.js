@@ -6,14 +6,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   Dimensions,
+  Pressable,
 } from "react-native";
 
 const { width: WINDOW_W } = Dimensions.get("window");
 const CARD_W = Math.min(300, WINDOW_W - 40); // narrow column as in screenshot
+const GREEN = "#2e7d32";
 
-export default function Requirements() {
+export default function Requirements({ navigation }) {
   const body = `
 SECTION 5. Requirements for Registration of Electric Vehicles:
 
@@ -37,33 +38,34 @@ e. E-Vehicles under Category L3 (e-Motorcycle) and Category L4 & L5 (e-Tricycle 
 City Ordinance No. 21-(2023) dated September 4, 2023
   `.trim();
 
+  const handleBack = () => {
+    if (navigation?.goBack) navigation.goBack();
+    else if (navigation?.navigate) navigation.navigate("Ordinance");
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
-      {/* green curved header */}
+      {/* ========== HEADER (same style as Definition screens) ========== */}
       <View style={styles.headerGreen}>
-        {/* optional small left circular icon - uncomment & replace with asset if you have one */}
-        {/*
-        <Image
-          source={require("../../assets/back-circle.png")}
-          style={styles.headerLeftIcon}
-          resizeMode="contain"
-        />
-        */}
-        <Text style={styles.title}>Requirements for Registration</Text>
-        {/* optional small right badge - uncomment if you have one
-        <Image source={require("../../assets/top-badge.png")} style={styles.headerRightIcon} resizeMode="contain" />
-        */}
+        <Pressable
+          onPress={handleBack}
+          style={styles.backCircle}
+          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+        >
+          <Text style={styles.backIcon}>‹</Text>
+        </Pressable>
+
+        <Text style={styles.headerTitle}>Requirements for Registration</Text>
       </View>
 
+      {/* ========== CONTENT ========== */}
       <ScrollView
         contentContainerStyle={styles.scrollArea}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-          {/* green circular accent overlapping the card (left/top) */}
-          <View style={styles.cardTopAccent} />
+          {/* shape removed – clean white card */}
 
-          {/* long body text (serif type) */}
           <Text style={styles.bodyText}>
             {body.split("\n\n").map((p, i) => (
               <Text
@@ -90,63 +92,66 @@ City Ordinance No. 21-(2023) dated September 4, 2023
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#fefefe",
+    backgroundColor: "#f4f4f4",
     alignItems: "center",
   },
 
-  /* header */
+  /* header same as Definition1/2/3 */
   headerGreen: {
     position: "absolute",
-    top: 8,
-    left: 12,
-    right: 12,
-    height: 68,
-    backgroundColor: "#2e7d32",
-    borderRadius: 12,
-    alignItems: "center",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 96,
+    backgroundColor: GREEN,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
     justifyContent: "center",
-    zIndex: 3,
-    paddingHorizontal: 12,
+    alignItems: "center",
+    paddingTop: 18,
+    zIndex: 10,
   },
 
-  title: {
+  backCircle: {
+    position: "absolute",
+    left: 16,
+    top: 35,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
+  },
+
+  backIcon: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: GREEN,
+  },
+
+  headerTitle: {
+    marginTop: 8,
     color: "#fff",
     fontSize: 18,
-    fontFamily: "Karma-Bold",
     fontWeight: "700",
     textAlign: "center",
   },
 
-  headerLeftIcon: {
-    position: "absolute",
-    left: 8,
-    top: 8,
-    width: 30,
-    height: 30,
-  },
-  headerRightIcon: {
-    position: "absolute",
-    right: 8,
-    top: 8,
-    width: 28,
-    height: 28,
-  },
-
-  /* push content down so card overlaps header (like screenshot) */
+  /* content */
   scrollArea: {
-    paddingTop: 48,
+    paddingTop: 130, // push content below the rounded header
     alignItems: "center",
     paddingHorizontal: 12,
     paddingBottom: 24,
   },
 
-  /* card */
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 14,
-    // shadow for raised card look
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
@@ -156,32 +161,18 @@ const styles = StyleSheet.create({
     position: "relative",
   },
 
-  /* green circle accent that peeks from top-left of the card */
-  cardTopAccent: {
-    position: "absolute",
-    left: -36,
-    top: -26,
-    width: 92,
-    height: 92,
-    backgroundColor: "#2e7d32",
-    borderRadius: 60,
-    zIndex: 0,
-  },
-
   bodyText: {
     width: "100%",
-    zIndex: 1,
   },
 
   sectionHeading: {
-    fontFamily: "CrimsonText-Bold",
     fontSize: 14,
+    fontWeight: "600",
     color: "#111",
     marginBottom: 6,
   },
 
   paragraph: {
-    fontFamily: "CrimsonText-Regular",
     fontSize: 13.5,
     color: "#222",
     lineHeight: 20,
@@ -189,10 +180,7 @@ const styles = StyleSheet.create({
 
   footerNote: {
     marginTop: 8,
-    fontFamily: "CrimsonText-Regular",
     fontSize: 11,
     color: "#333",
   },
 });
-
-
