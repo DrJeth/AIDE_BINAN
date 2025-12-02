@@ -12,56 +12,60 @@ import {
 } from "react-native";
 
 const { width: WINDOW_W } = Dimensions.get("window");
-const CONTENT_W = Math.min(280, WINDOW_W - 48);
+const CONTENT_W = Math.min(330, WINDOW_W - 36);
 
 export default function Purpose({ navigation }) {
   return (
     <SafeAreaView style={styles.screen}>
-      {/* big green curved shapes (left/top and right/bottom) */}
+      
+      {/* Header green curved top */}
       <View style={styles.topGreen}>
         <Text style={styles.headerTitle}>Purpose and Scope</Text>
       </View>
 
-      {/* Back button (top-left) */}
+      {/* Back Button - aligned with header */}
       <Pressable
         onPress={() => navigation?.goBack()}
         style={({ pressed }) => [styles.backWrap, pressed && styles.backPressed]}
         android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
-        accessibilityRole="button"
       >
         <View style={styles.backCircle}>
           <Text style={styles.backX}>‹</Text>
         </View>
       </Pressable>
 
-      {/* faint decorative circle on right */}
+      {/* Decorative green circle (right side) */}
       <View style={styles.rightGreenCircle} />
 
-      {/* top-right scooter/logo circle */}
+      {/* AIDE logo top-right */}
       <Image
         source={require("../../assets/scooter-icon.png")}
         style={styles.topRightBadge}
         resizeMode="contain"
       />
 
-      {/* white card content */}
+      {/* Content Section */}
       <ScrollView
         contentContainerStyle={styles.scrollArea}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CONTENT_W }]}>
+
+          {/* Binan Logo - Original Position */}
           <Image
             source={require("../../assets/binan-logo.png")}
             style={styles.binanLogo}
             resizeMode="contain"
           />
 
+          {/* Description text */}
           <Text style={styles.contentText}>
             To adopt a uniform system for the Registration and Operation of all
-            Electric Vehicle (Bicycle, Tricycle, 4-Cycle and Scooters) being used
-            as a mode of transportation within the territorial jurisdiction of the
-            City of Binan, Laguna.
+            Electric Vehicle (Bicycle, Tricycle, 4-Cycle and Scooters) being
+            used as a mode of transportation within the territorial jurisdiction
+            of the City of Biñan, Laguna.
           </Text>
+
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -75,57 +79,60 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  /* Header area with corrected alignment */
   topGreen: {
     position: "absolute",
-    top: -40,
+    top: -20,
     left: -40,
     width: WINDOW_W + 80,
-    height: 220,
+    height: 210,
     backgroundColor: "#2e7d32",
     borderBottomLeftRadius: 140,
     borderBottomRightRadius: 140,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 36,
+    paddingTop: 85,
     zIndex: 0,
   },
+
   headerTitle: {
-    fontFamily: "Karma-Bold",
     fontWeight: "700",
     color: "#fff",
-    fontSize: 20,
+    fontSize: 24,
     textAlign: "center",
   },
 
-  /* back button */
+  /* Back Button Perfect Alignment WITH title */
   backWrap: {
     position: "absolute",
-    left: 10,
-    top: 12,
+    left: 12,
+    top: 70,   // <-- PERFECTLY LEVEL WITH TITLE
     zIndex: 10,
   },
+
   backPressed: { opacity: 0.8 },
+
   backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
     backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
   },
+
   backX: {
     color: "#fff",
     fontSize: 22,
-    lineHeight: 22,
     fontWeight: "700",
   },
 
   rightGreenCircle: {
     position: "absolute",
     right: -30,
-    top: 80,
+    top: 100,
     width: 140,
     height: 240,
     backgroundColor: "#2e7d32",
@@ -136,14 +143,14 @@ const styles = StyleSheet.create({
   topRightBadge: {
     position: "absolute",
     right: 24,
-    top: 40,
+    top: 85,
     width: 92,
     height: 92,
     zIndex: 2,
   },
 
   scrollArea: {
-    paddingTop: 110,
+    paddingTop: 200,
     alignItems: "center",
     paddingBottom: 40,
     width: "100%",
@@ -151,16 +158,15 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    borderRadius: 14,
+    paddingVertical: 22,
+    paddingHorizontal: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 6,
-    zIndex: 3,
-    alignItems: "flex-start",
+    alignItems: "center",
   },
 
   binanLogo: {
@@ -172,10 +178,10 @@ const styles = StyleSheet.create({
   },
 
   contentText: {
-    marginTop: 12,
-    fontFamily: "CrimsonText-Regular",
-    fontSize: 16,
+    marginTop: 20,
+    fontSize: 18,
+    lineHeight: 26,
     color: "#000",
-    lineHeight: 22,
+    textAlign: "center",
   },
 });
