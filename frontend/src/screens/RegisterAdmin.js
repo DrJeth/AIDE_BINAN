@@ -220,6 +220,7 @@ export default function RegisterAdmin({ navigation }) {
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Personal Information</Text>
       
+      <Text style={styles.fieldLabel}>First Name</Text>
       <TextInput
         style={styles.input}
         placeholder="First Name"
@@ -228,6 +229,7 @@ export default function RegisterAdmin({ navigation }) {
         onChangeText={(v) => update('firstName', v)}
       />
       
+      <Text style={styles.fieldLabel}>Middle Name (Optional)</Text>
       <TextInput
         style={styles.input}
         placeholder="Middle Name (Optional)"
@@ -236,6 +238,7 @@ export default function RegisterAdmin({ navigation }) {
         onChangeText={(v) => update('middleName', v)}
       />
       
+      <Text style={styles.fieldLabel}>Last Name</Text>
       <TextInput
         style={styles.input}
         placeholder="Last Name"
@@ -244,6 +247,7 @@ export default function RegisterAdmin({ navigation }) {
         onChangeText={(v) => update('lastName', v)}
       />
       
+      <Text style={styles.fieldLabel}>Birthday</Text>
       <TouchableOpacity 
         style={styles.datePickerInput}
         onPress={() => setShowBirthdayPicker(true)}
@@ -275,6 +279,7 @@ export default function RegisterAdmin({ navigation }) {
         </View>
       )}
       
+      <Text style={styles.fieldLabel}>Contact Number</Text>
       <TextInput
         style={styles.input}
         placeholder="Contact Number (10-11 digits)"
@@ -288,6 +293,7 @@ export default function RegisterAdmin({ navigation }) {
         maxLength={11}
       />
       
+      <Text style={styles.fieldLabel}>Address</Text>
       <TextInput
         style={styles.input}
         placeholder="Address"
@@ -299,9 +305,8 @@ export default function RegisterAdmin({ navigation }) {
   );
 
   const renderWorkSection = () => (
-    
     <View style={styles.formSection}>
-        {/* <View style={styles.departmentContainer}>
+      {/* <View style={styles.departmentContainer}>
         <Text style={styles.departmentLabel}>Department</Text>
         <View style={styles.departmentValue}>
           <Text style={styles.departmentText}>
@@ -311,6 +316,7 @@ export default function RegisterAdmin({ navigation }) {
       </View> */}
       <Text style={styles.sectionTitle}>Work Information</Text>
       
+      <Text style={styles.fieldLabel}>Employee Number</Text>
       <TextInput
         style={styles.input}
         placeholder="Employee Number (4 digits)"
@@ -321,8 +327,7 @@ export default function RegisterAdmin({ navigation }) {
         maxLength={4}
       />
       
-    
-      
+      <Text style={styles.fieldLabel}>Position</Text>
       <TouchableOpacity 
         style={styles.dropdownInput}
         onPress={() => setPositionModalVisible(true)}
@@ -378,6 +383,7 @@ export default function RegisterAdmin({ navigation }) {
         </View>
       </Modal>
       
+      <Text style={styles.fieldLabel}>Email</Text>
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -388,6 +394,7 @@ export default function RegisterAdmin({ navigation }) {
         autoCapitalize="none"
       />
       
+      <Text style={styles.fieldLabel}>Password</Text>
       <TextInput
         style={styles.input}
         placeholder="Password (min. 6 characters)"
@@ -397,6 +404,7 @@ export default function RegisterAdmin({ navigation }) {
         secureTextEntry
       />
       
+      <Text style={styles.fieldLabel}>Confirm Password</Text>
       <TextInput
         style={styles.input}
         placeholder="Confirm Password"
@@ -504,6 +512,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 15,
     color: '#333'
+  },
+  // NEW: label above each input
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 6
   },
   input: {
     borderWidth: 1,
