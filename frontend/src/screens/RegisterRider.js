@@ -8,17 +8,27 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-  Platform
+  Platform,
 } from "react-native";
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { auth } from "../config/firebaseConfig";
-import { getFirestore, collection, addDoc, query, where, getDocs } from "firebase/firestore";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 
 const db = getFirestore();
 
 function RegisterRider({ navigation }) {
-  const [activeSection, setActiveSection] = useState('personal');
+  const [activeSection, setActiveSection] = useState("personal");
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -33,14 +43,14 @@ function RegisterRider({ navigation }) {
     plateNumber: "",
     email: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const update = (key, value) => {
-    setForm(prev => ({ ...prev, [key]: value }));
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   // Validation Functions
@@ -50,34 +60,39 @@ function RegisterRider({ navigation }) {
   };
 
   const formatPhoneNumber = (value) => {
-    const cleaned = value.replace(/\D/g, '');
+    const cleaned = value.replace(/\D/g, "");
     return cleaned.slice(0, 11); // Max 11 digits
   };
 
   const validateContactNumber = (contactNumber) => {
     const phoneRegex = /^[0-9]{10,11}$/;
-    return phoneRegex.test(contactNumber.replace(/\D/g, ''));
+    return phoneRegex.test(contactNumber.replace(/\D/g, ""));
   };
 
   const validateAge = (birthday) => {
     const today = new Date();
     const age = today.getFullYear() - birthday.getFullYear();
     const monthDiff = today.getMonth() - birthday.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthday.getDate())) {
+
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birthday.getDate())
+    ) {
       return age - 1;
     }
     return age;
   };
 
   const validateChassisMotorNumber = (number) => {
-    if (!number || number.trim() === '') return false;
-    if (number.toLowerCase() === 'none') return true;
-    
-    const cleanNumber = number.replace(/\D/g, '');
+    if (!number || number.trim() === "") return false;
+    if (number.toLowerCase() === "none") return true;
+
+    const cleanNumber = number.replace(/\D/g, "");
     // Chassis: 10-12 digits OR Motor: 15-20 digits
-    return (cleanNumber.length >= 10 && cleanNumber.length <= 12) || 
-           (cleanNumber.length >= 15 && cleanNumber.length <= 20);
+    return (
+      (cleanNumber.length >= 10 && cleanNumber.length <= 12) ||
+      (cleanNumber.length >= 15 && cleanNumber.length <= 20)
+    );
   };
 
   const validatePlateNumber = (plateNumber) => {
@@ -88,33 +103,39 @@ function RegisterRider({ navigation }) {
 
   const validatePersonalInfo = () => {
     const personalFields = [
-      { key: 'firstName', label: 'First Name' },
-      { key: 'lastName', label: 'Last Name' },
-      { key: 'contactNumber', label: 'Contact Number' },
-      { key: 'address', label: 'Address' }
+      { key: "firstName", label: "First Name" },
+      { key: "lastName", label: "Last Name" },
+      { key: "contactNumber", label: "Contact Number" },
+      { key: "address", label: "Address" },
     ];
 
     for (let field of personalFields) {
-      if (!form[field.key] || (typeof form[field.key] === 'string' && form[field.key].trim() === '')) {
-        Alert.alert('Error', `Please fill in ${field.label}`);
+      if (
+        !form[field.key] ||
+        (typeof form[field.key] === "string" &&
+          form[field.key].trim() === "")
+      ) {
+        Alert.alert("Error", `Please fill in ${field.label}`);
         return false;
       }
     }
 
     if (!form.birthday) {
-      Alert.alert('Error', 'Please select your birthday');
+      Alert.alert("Error", "Please select your birthday");
       return false;
     }
 
-    // Validate age (minimum 18 years old)
     const age = validateAge(form.birthday);
     if (age < 18) {
-      Alert.alert('Error', `You must be at least 18 years old to register. You are currently ${age} years old.`);
+      Alert.alert(
+        "Error",
+        `You must be at least 18 years old to register. You are currently ${age} years old.`
+      );
       return false;
     }
 
     if (!validateContactNumber(form.contactNumber)) {
-      Alert.alert('Error', 'Contact number must be 10-11 digits');
+      Alert.alert("Error", "Contact number must be 10-11 digits");
       return false;
     }
 
@@ -122,53 +143,60 @@ function RegisterRider({ navigation }) {
   };
 
   const validateEbikeInfo = () => {
-    // Check all required fields
     const ebikeFields = [
-      { key: 'ebikeBrand', label: 'E-Bike Brand' },
-      { key: 'ebikeModel', label: 'Model Unit' },
-      { key: 'ebikeColor', label: 'E-Bike Color' },
-      { key: 'branch', label: 'Branch' },
-      { key: 'plateNumber', label: 'Plate Number' },
-      { key: 'email', label: 'Email' },
-      { key: 'password', label: 'Password' },
-      { key: 'confirmPassword', label: 'Confirm Password' }
+      { key: "ebikeBrand", label: "E-Bike Brand" },
+      { key: "ebikeModel", label: "Model Unit" },
+      { key: "ebikeColor", label: "E-Bike Color" },
+      { key: "branch", label: "Branch" },
+      { key: "plateNumber", label: "Plate Number" },
+      { key: "email", label: "Email" },
+      { key: "password", label: "Password" },
+      { key: "confirmPassword", label: "Confirm Password" },
     ];
 
     for (let field of ebikeFields) {
       const value = form[field.key];
-      if (value === null || value === '' || (typeof value === 'string' && value.trim() === '')) {
-        Alert.alert('Error', `Please fill in ${field.label}`);
+      if (
+        value === null ||
+        value === "" ||
+        (typeof value === "string" && value.trim() === "")
+      ) {
+        Alert.alert("Error", `Please fill in ${field.label}`);
         return false;
       }
     }
 
-    // Validate Chassis/Motor number
     if (!validateChassisMotorNumber(form.chassisMotorNumber)) {
-      Alert.alert('Error', 'Please enter Chassis Number (10-12 digits), Motor Number (15-20 digits), or type "none"');
+      Alert.alert(
+        "Error",
+        'Please enter Chassis Number (10-12 digits), Motor Number (15-20 digits), or type "none"'
+      );
       return false;
     }
 
-    // Validate Email format
     if (!validateEmail(form.email)) {
-      Alert.alert('Error', 'Please enter a valid email address (e.g., user@example.com)');
+      Alert.alert(
+        "Error",
+        "Please enter a valid email address (e.g., user@example.com)"
+      );
       return false;
     }
 
-    // Validate Plate Number format
     if (!validatePlateNumber(form.plateNumber)) {
-      Alert.alert('Error', 'Plate Number must be in format: 2 letters followed by 4 numbers (e.g., AB1234)');
+      Alert.alert(
+        "Error",
+        "Plate Number must be in format: 2 letters followed by 4 numbers (e.g., AB1234)"
+      );
       return false;
     }
 
-    // Validate passwords match
     if (form.password !== form.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert("Error", "Passwords do not match");
       return false;
     }
 
-    // Validate password length
     if (form.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      Alert.alert("Error", "Password must be at least 6 characters long");
       return false;
     }
 
@@ -186,142 +214,170 @@ function RegisterRider({ navigation }) {
       const normalizedPlateNumber = form.plateNumber.trim().toUpperCase();
 
       console.log("Checking plate number...");
-      // Check if plate number exists
       const plateQuery = query(
-        collection(db, "users"), 
+        collection(db, "users"),
         where("plateNumber", "==", normalizedPlateNumber)
       );
       const plateSnapshot = await getDocs(plateQuery);
 
       if (!plateSnapshot.empty) {
-        Alert.alert('Error', 'This plate number is already registered. Please use a different plate number.');
+        Alert.alert(
+          "Error",
+          "This plate number is already registered. Please use a different plate number."
+        );
         setLoading(false);
         return;
       }
 
       console.log("Checking email...");
-      // Check if email already exists
       const emailQuery = query(
-        collection(db, "users"), 
+        collection(db, "users"),
         where("email", "==", normalizedEmail)
       );
       const emailSnapshot = await getDocs(emailQuery);
 
       if (!emailSnapshot.empty) {
-        Alert.alert('Error', 'This email is already registered. Please use a different email or log in.');
+        Alert.alert(
+          "Error",
+          "This email is already registered. Please use a different email or log in."
+        );
         setLoading(false);
         return;
       }
 
       console.log("Creating Firebase user...");
-      // Create user in Firebase
       const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        normalizedEmail, 
+        auth,
+        normalizedEmail,
         form.password
       );
 
       console.log("Adding user to Firestore...");
-      // Add user to Firestore
       await addDoc(collection(db, "users"), {
         uid: userCredential.user.uid,
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
-        birthday: form.birthday.toISOString().split('T')[0],
+        birthday: form.birthday.toISOString().split("T")[0],
         contactNumber: form.contactNumber,
         address: form.address.trim(),
         ebikeBrand: form.ebikeBrand.trim(),
         ebikeModel: form.ebikeModel.trim(),
         ebikeColor: form.ebikeColor.trim(),
-        chassisMotorNumber: form.chassisMotorNumber.toLowerCase() === 'none' ? 'none' : form.chassisMotorNumber,
+        chassisMotorNumber:
+          form.chassisMotorNumber.toLowerCase() === "none"
+            ? "none"
+            : form.chassisMotorNumber,
         branch: form.branch.trim(),
         plateNumber: normalizedPlateNumber,
         email: normalizedEmail,
         role: "Rider",
         status: "Pending",
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
 
       console.log("Automatically logging in user...");
-      // Automatically log in the user after registration
       await signInWithEmailAndPassword(auth, normalizedEmail, form.password);
 
       console.log("Registration successful!");
       Alert.alert(
-        'Success', 
-        'Your rider account has been created successfully! You are now logged in.',
-        [{ text: 'OK', onPress: () => navigation.replace('HomeRider') }]
+        "Success",
+        "Your rider account has been created successfully! You are now logged in.",
+        [{ text: "OK", onPress: () => navigation.replace("HomeRider") }]
       );
     } catch (error) {
-      console.error("Registration error full details:", JSON.stringify(error, null, 2));
+      console.error(
+        "Registration error full details:",
+        JSON.stringify(error, null, 2)
+      );
       console.error("Error name:", error.name);
       console.error("Error code:", error.code);
       console.error("Error message:", error.message);
-      
-      let errorMessage = '';
-      
-      // More specific error messages
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already registered. Please use a different email or log in.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak. Please use a stronger password with at least 6 characters.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email format. Please check your email address.';
-      } else if (error.code === 'auth/operation-not-allowed') {
-        errorMessage = 'Account creation is currently disabled. Please try again later.';
-      } else if (error.code === 'auth/network-request-failed') {
-        errorMessage = 'Network error. Please check your internet connection and try again.';
+
+      let errorMessage = "";
+
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage =
+          "This email is already registered. Please use a different email or log in.";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage =
+          "Password is too weak. Please use a stronger password with at least 6 characters.";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage =
+          "Invalid email format. Please check your email address.";
+      } else if (error.code === "auth/operation-not-allowed") {
+        errorMessage =
+          "Account creation is currently disabled. Please try again later.";
+      } else if (error.code === "auth/network-request-failed") {
+        errorMessage =
+          "Network error. Please check your internet connection and try again.";
       } else if (error.message) {
         errorMessage = error.message;
       } else {
-        errorMessage = 'An unexpected error occurred. Please try again.';
+        errorMessage = "An unexpected error occurred. Please try again.";
       }
 
-      Alert.alert(
-        'Registration Failed', 
-        errorMessage
-      );
+      Alert.alert("Registration Failed", errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  /* ---------- UI SECTIONS WITH LABEL + CARD INPUT ---------- */
+
   const renderPersonalSection = () => (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Personal Information</Text>
-      
-      <Text style={styles.fieldLabel}>First Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="First Name"
-        placeholderTextColor="#999"
-        value={form.firstName}
-        onChangeText={(v) => update('firstName', v)}
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Last Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Last Name"
-        placeholderTextColor="#999"
-        value={form.lastName}
-        onChangeText={(v) => update('lastName', v)}
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Birthday</Text>
-      <TouchableOpacity 
-        style={styles.input} 
-        onPress={() => !loading && setShowDatePicker(true)}
-        disabled={loading}
-      >
-        <Text style={form.birthday ? styles.inputText : styles.placeholderText}>
-          {form.birthday ? form.birthday.toLocaleDateString() : 'Birthday'}
-        </Text>
-      </TouchableOpacity>
-      
-      {Platform.OS === 'ios' && showDatePicker && (
+
+      {/* First Name */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>First Name</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your first name"
+            placeholderTextColor="#999"
+            value={form.firstName}
+            onChangeText={(v) => update("firstName", v)}
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Last Name */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Last Name</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your last name"
+            placeholderTextColor="#999"
+            value={form.lastName}
+            onChangeText={(v) => update("lastName", v)}
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Birthday */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Birthday</Text>
+        <View style={styles.inputCard}>
+          <TouchableOpacity
+            style={styles.datePickerRow}
+            onPress={() => !loading && setShowDatePicker(true)}
+            disabled={loading}
+          >
+            <Text style={styles.datePickerText}>
+              {form.birthday
+                ? form.birthday.toLocaleDateString()
+                : "Select birthday"}
+            </Text>
+            <Text style={styles.datePickerIcon}>📅</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {Platform.OS === "ios" && showDatePicker && (
         <DateTimePicker
           value={form.birthday}
           mode="date"
@@ -329,168 +385,224 @@ function RegisterRider({ navigation }) {
           onChange={(event, selectedDate) => {
             setShowDatePicker(false);
             if (selectedDate) {
-              update('birthday', selectedDate);
+              update("birthday", selectedDate);
             }
           }}
         />
       )}
-      
-      {Platform.OS === 'android' && showDatePicker && (
+
+      {Platform.OS === "android" && showDatePicker && (
         <DateTimePicker
           value={form.birthday}
           mode="date"
           display="default"
           onChange={(event, selectedDate) => {
-            setShowDatePicker(Platform.OS === 'ios');
-            if (event.type === 'set' && selectedDate) {
-              update('birthday', selectedDate);
+            setShowDatePicker(Platform.OS === "ios");
+            if (event.type === "set" && selectedDate) {
+              update("birthday", selectedDate);
             }
           }}
         />
       )}
-      
-      <Text style={styles.fieldLabel}>Contact Number</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Contact Number (10-11 digits)"
-        placeholderTextColor="#999"
-        value={form.contactNumber}
-        onChangeText={(v) => update('contactNumber', formatPhoneNumber(v))}
-        keyboardType="phone-pad"
-        editable={!loading}
-        maxLength={11}
-      />
-      
-      <Text style={styles.fieldLabel}>Address</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Address"
-        placeholderTextColor="#999"
-        value={form.address}
-        onChangeText={(v) => update('address', v)}
-        editable={!loading}
-        multiline
-        numberOfLines={3}
-      />
+
+      {/* Contact Number */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Contact Number</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="10–11 digit contact number"
+            placeholderTextColor="#999"
+            value={form.contactNumber}
+            onChangeText={(v) => update("contactNumber", formatPhoneNumber(v))}
+            keyboardType="phone-pad"
+            editable={!loading}
+            maxLength={11}
+          />
+        </View>
+      </View>
+
+      {/* Address */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Address</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={[styles.input, styles.multilineInput]}
+            placeholder="Enter your address"
+            placeholderTextColor="#999"
+            value={form.address}
+            onChangeText={(v) => update("address", v)}
+            editable={!loading}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </View>
     </View>
   );
 
   const renderEbikeSection = () => (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>E-Bike Information</Text>
-      
-      <Text style={styles.fieldLabel}>E-Bike Brand</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="E-Bike Brand"
-        placeholderTextColor="#999"
-        value={form.ebikeBrand}
-        onChangeText={(v) => update('ebikeBrand', v)}
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Model Unit</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Model Unit"
-        placeholderTextColor="#999"
-        value={form.ebikeModel}
-        onChangeText={(v) => update('ebikeModel', v)}
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>E-Bike Color</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="E-Bike Color"
-        placeholderTextColor="#999"
-        value={form.ebikeColor}
-        onChangeText={(v) => update('ebikeColor', v)}
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Chassis/Motor Number</Text>
-      <View>
-        <TextInput
-          style={styles.input}
-          placeholder="Chassis/Motor Number (10-12 or 15-20 digits, or 'none')"
-          placeholderTextColor="#999"
-          value={form.chassisMotorNumber}
-          onChangeText={(v) => update('chassisMotorNumber', v)}
-          editable={!loading}
-        />
+
+      {/* E-Bike Brand */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>E-Bike Brand</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter E-bike brand"
+            placeholderTextColor="#999"
+            value={form.ebikeBrand}
+            onChangeText={(v) => update("ebikeBrand", v)}
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Model Unit */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Model Unit</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter model unit"
+            placeholderTextColor="#999"
+            value={form.ebikeModel}
+            onChangeText={(v) => update("ebikeModel", v)}
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* E-Bike Color */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>E-Bike Color</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter E-bike color"
+            placeholderTextColor="#999"
+            value={form.ebikeColor}
+            onChangeText={(v) => update("ebikeColor", v)}
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Chassis/Motor Number */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Chassis / Motor Number</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="10–12 or 15–20 digits, or type 'none'"
+            placeholderTextColor="#999"
+            value={form.chassisMotorNumber}
+            onChangeText={(v) => update("chassisMotorNumber", v)}
+            editable={!loading}
+          />
+        </View>
         <Text style={styles.helpText}>
-          Format: Chassis 10-12 digits / Motor 15-20 digits / or type "none"
+          Chassis: 10–12 digits / Motor: 15–20 digits / or type "none"
         </Text>
       </View>
-      
-      <Text style={styles.fieldLabel}>Branch</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Branch (Store where purchased)"
-        placeholderTextColor="#999"
-        value={form.branch}
-        onChangeText={(v) => update('branch', v)}
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Plate Number</Text>
-      <View>
-        <TextInput
-          style={styles.input}
-          placeholder="Plate Number (e.g., AB1234)"
-          placeholderTextColor="#999"
-          value={form.plateNumber}
-          onChangeText={(v) => update('plateNumber', v.toUpperCase())}
-          editable={!loading}
-          maxLength={6}
-        />
+
+      {/* Branch */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Branch</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Store where purchased"
+            placeholderTextColor="#999"
+            value={form.branch}
+            onChangeText={(v) => update("branch", v)}
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Plate Number */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Plate Number</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., AB1234"
+            placeholderTextColor="#999"
+            value={form.plateNumber}
+            onChangeText={(v) => update("plateNumber", v.toUpperCase())}
+            editable={!loading}
+            maxLength={6}
+          />
+        </View>
         <Text style={styles.helpText}>
           Format: 2 letters followed by 4 numbers (e.g., AB1234)
         </Text>
       </View>
-      
-      <Text style={styles.fieldLabel}>Email</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#999"
-        value={form.email}
-        onChangeText={(v) => update('email', v.toLowerCase())}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Password</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Password (min 6 characters)"
-        placeholderTextColor="#999"
-        value={form.password}
-        onChangeText={(v) => update('password', v)}
-        secureTextEntry
-        editable={!loading}
-      />
-      
-      <Text style={styles.fieldLabel}>Confirm Password</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        placeholderTextColor="#999"
-        value={form.confirmPassword}
-        onChangeText={(v) => update('confirmPassword', v)}
-        secureTextEntry
-        editable={!loading}
-      />
+
+      {/* Email */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Email</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter email address"
+            placeholderTextColor="#999"
+            value={form.email}
+            onChangeText={(v) => update("email", v.toLowerCase())}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Password */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Password</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Minimum 6 characters"
+            placeholderTextColor="#999"
+            value={form.password}
+            onChangeText={(v) => update("password", v)}
+            secureTextEntry
+            editable={!loading}
+          />
+        </View>
+      </View>
+
+      {/* Confirm Password */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>Confirm Password</Text>
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Re-enter password"
+            placeholderTextColor="#999"
+            value={form.confirmPassword}
+            onChangeText={(v) => update("confirmPassword", v)}
+            secureTextEntry
+            editable={!loading}
+          />
+        </View>
+      </View>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 🔹 Green header bar like the other screen */}
+      <View style={styles.greenHeader}>
+        <Text style={styles.greenHeaderText}>AIDE</Text>
+      </View>
+
       <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <TouchableOpacity
+          style={styles.backButton}
           onPress={() => !loading && navigation.goBack()}
           disabled={loading}
         >
@@ -500,32 +612,34 @@ function RegisterRider({ navigation }) {
       </View>
 
       <View style={styles.contentContainer}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
-          {activeSection === 'personal' ? renderPersonalSection() : renderEbikeSection()}
+          {activeSection === "personal"
+            ? renderPersonalSection()
+            : renderEbikeSection()}
 
           <View style={styles.navigationButtons}>
-            {activeSection === 'ebike' && (
-              <TouchableOpacity 
-                style={[styles.button, styles.backButtonStyle]} 
-                onPress={() => setActiveSection('personal')}
+            {activeSection === "ebike" && (
+              <TouchableOpacity
+                style={[styles.button, styles.backButtonStyle]}
+                onPress={() => setActiveSection("personal")}
                 disabled={loading}
               >
                 <Text style={styles.backButtonText}>Back</Text>
               </TouchableOpacity>
             )}
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[
-                styles.button, 
+                styles.button,
                 styles.nextButton,
-                loading && styles.buttonDisabled
-              ]} 
+                loading && styles.buttonDisabled,
+              ]}
               onPress={() => {
-                if (activeSection === 'personal') {
-                  if (validatePersonalInfo()) setActiveSection('ebike');
+                if (activeSection === "personal") {
+                  if (validatePersonalInfo()) setActiveSection("ebike");
                 } else {
                   handleSubmit();
                 }
@@ -533,7 +647,11 @@ function RegisterRider({ navigation }) {
               disabled={loading}
             >
               <Text style={styles.nextButtonText}>
-                {loading ? 'Loading...' : (activeSection === 'personal' ? 'Next' : 'Submit')}
+                {loading
+                  ? "Loading..."
+                  : activeSection === "personal"
+                  ? "Next"
+                  : "Submit"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -543,112 +661,152 @@ function RegisterRider({ navigation }) {
   );
 }
 
+/* shared shadow for the card-style inputs */
+const cardShadow = {
+  shadowColor: "#000",
+  shadowOpacity: 0.08,
+  shadowOffset: { width: 0, height: 2 },
+  shadowRadius: 4,
+  elevation: 2,
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: "#FFFFFF",
   },
+
+  /* 🔹 new green header */
+  greenHeader: {
+    backgroundColor: "#2E7D32",
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  greenHeaderText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0'
+    borderBottomColor: "#E0E0E0",
   },
   backButton: {
-    padding: 5
+    padding: 5,
   },
   backText: {
     fontSize: 24,
-    color: '#000'
+    color: "#000",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#000',
-    marginLeft: 15
+    fontWeight: "600",
+    color: "#000",
+    marginLeft: 15,
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 20
+    paddingHorizontal: 20,
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: 20
+    paddingBottom: 20,
   },
   formSection: {
-    marginTop: 10
+    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 10,
-    color: '#333'
+    color: "#333",
   },
-  // NEW: labels above inputs
+
+  // label + card layout
+  fieldContainer: {
+    marginBottom: 16,
+  },
   fieldLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 6,
+  },
+  inputCard: {
+    backgroundColor: "#F7F7F7",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    ...cardShadow,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginBottom: 10,
     fontSize: 14,
-    color: '#000',
-    justifyContent: 'center'
+    color: "#000",
+    paddingVertical: 8,
   },
-  inputText: {
-    color: '#000'
+  multilineInput: {
+    textAlignVertical: "top",
   },
-  placeholderText: {
-    color: '#999'
+
+  datePickerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
   },
+  datePickerText: {
+    fontSize: 14,
+    color: "#000",
+  },
+  datePickerIcon: {
+    fontSize: 18,
+  },
+
   helpText: {
     fontSize: 12,
-    color: '#666',
-    marginTop: -8,
-    marginBottom: 10,
-    fontStyle: 'italic'
+    color: "#666",
+    marginTop: 4,
+    fontStyle: "italic",
   },
+
   navigationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 5,
-    gap: 10
+    gap: 10,
   },
   button: {
     paddingVertical: 10,
     paddingHorizontal: 30,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
   },
   backButtonStyle: {
-    backgroundColor: '#F0F0F0'
+    backgroundColor: "#F0F0F0",
   },
   nextButton: {
-    backgroundColor: '#4CAF50'
+    backgroundColor: "#4CAF50",
   },
   buttonDisabled: {
-    backgroundColor: '#CCCCCC',
-    opacity: 0.7
+    backgroundColor: "#CCCCCC",
+    opacity: 0.7,
   },
   backButtonText: {
-    color: '#000',
-    fontWeight: '500'
+    color: "#000",
+    fontWeight: "500",
   },
   nextButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '500'
-  }
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
 });
 
 export default RegisterRider;
