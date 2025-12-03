@@ -203,21 +203,23 @@ export default function Ordinance({ navigation }) {
     } catch (e) {}
   }, [navigation]);
 
+  // 🔧 FIXED: use `navigation` directly so Section 2 opens immediately
   const handleArrowPress = (row) => {
-    const parent = navigation.getParent?.() ?? navigation;
     switch (row.id) {
       case 2:
-        return parent.navigate("Purpose");
+        return navigation.navigate("Purpose");      // Section 2 – Purpose and Scope
       case 3:
-        return parent.navigate("Definition1");
+        return navigation.navigate("Definition1");
       case 4:
-        return parent.navigate("Requirements");
+        return navigation.navigate("Requirements");
       case 5:
-        return parent.navigate("Imposition");
+        return navigation.navigate("Imposition");
       case 7:
-        return parent.navigate("Provision");
+        return navigation.navigate("Provision");
       case 8:
-        return parent.navigate("Penalty");
+        return navigation.navigate("Penalty");
+      default:
+        return;
     }
   };
 
@@ -436,3 +438,6 @@ const styles = StyleSheet.create({
     top: 8,
   },
 });
+
+
+
