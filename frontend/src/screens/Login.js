@@ -17,7 +17,7 @@ import {
   LogBox,
   ActivityIndicator
 } from "react-native";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../config/firebaseConfig";
 import { collection, getFirestore, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
 
@@ -42,7 +42,8 @@ export default function Login({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [registrationModalVisible, setRegistrationModalVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);      // login loading
+  const [isResetting, setIsResetting] = useState(false);  // NEW: forgot-password loading
   
   // NEW: show/hide password
   const [showPassword, setShowPassword] = useState(false);
@@ -77,6 +78,40 @@ export default function Login({ navigation }) {
   useEffect(() => {
     console.log("Login screen mounted");
   }, []);
+
+  // ===== FORGOT PASSWORD HANDLER =====
+  const handleForgotPassword = async () => {
+    const trimmedEmail = email.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!trimmedEmail) {
+      Alert.alert("Forgot Password", "Please enter your email first.");
+      return;
+    }
+
+    if (!emailRegex.test(trimmedEmail)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    try {
+      setIsResetting(true);
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      Alert.alert(
+        "Reset Link Sent",
+        `A password reset link has been sent to ${trimmedEmail}. Please check your inbox or spam folder.`
+      );
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      if (error.code === "auth/user-not-found") {
+        Alert.alert("Error", "No account found with this email.");
+      } else {
+        Alert.alert("Error", error.message || "Failed to send reset email.");
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Send email verification code via PHP backend
   const sendEmailVerificationCode = async (userEmail, userDocId) => {
@@ -527,6 +562,15 @@ export default function Login({ navigation }) {
                 </TouchableOpacity>
               </View>
 
+              {/* Forgot password under Show/Hide */}
+              <View style={styles.forgotRow}>
+                <TouchableOpacity onPress={handleForgotPassword} disabled={isResetting}>
+                  <Text style={styles.forgotText}>
+                    {isResetting ? "Sending reset link..." : "Forgot password?"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
                 style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
                 onPress={handleLogin}
@@ -842,6 +886,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e3e3e3",
   },
+
+  // forgot password styles
+  forgotRow: {
+    alignItems: "flex-end",
+    marginTop: -4,
+    marginBottom: 4,
+  },
+  forgotText: {
+    fontSize: 12,
+    color: "#2e7d32",
+    fontWeight: "600",
+  },
+
   loginBtn: {
     backgroundColor: "#124923",
     paddingVertical: 13,

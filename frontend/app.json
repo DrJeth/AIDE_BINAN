@@ -7,18 +7,15 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aide.rider"
     },
-
     "android": {
       "package": "com.aide.rider",
       "adaptiveIcon": {
@@ -26,19 +23,17 @@
         "backgroundColor": "#ffffff"
       }
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "assetBundlePatterns": [
       "**/*"
     ],
-
     "extra": {
       "eas": {
-        "projectId": "helaena"
+        "projectId": "8e81ca9c-740b-401e-b501-54046b673a67"
       }
-    }
+    },
+    "owner": "helaena"
   }
 }
