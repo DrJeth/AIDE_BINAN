@@ -1,35 +1,43 @@
 {
   "expo": {
-    "name": "imask-frontend",
-    "slug": "imask-frontend",
+    "name": "Aide",
+    "slug": "aide",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aide.rider"
     },
+
     "android": {
+      "package": "com.aide.rider",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "package": "com.aide.rider"
+      }
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+
     "extra": {
       "eas": {
-        "projectId": "5cca862a-22d6-4719-a714-32753c7c1b88"
+        "projectId": "helaena"
       }
     }
   }
