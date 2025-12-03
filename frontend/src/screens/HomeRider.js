@@ -146,6 +146,20 @@ export default function HomeRider({ navigation }) {
     );
   };
 
+  // 🔹 NEW: compute display name based on who is logged in
+  const getDisplayName = () => {
+    if (userData?.firstName) return userData.firstName;
+
+    const currentUser = auth.currentUser;
+    if (currentUser?.displayName) return currentUser.displayName;
+
+    if (currentUser?.email) {
+      return currentUser.email.split("@")[0];
+    }
+
+    return "Rider";
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       
@@ -166,7 +180,7 @@ export default function HomeRider({ navigation }) {
         {/* Greeting */}
         <View style={styles.greetingSection}>
           <Text style={styles.welcomeText}>
-            Welcome, {userData?.firstName || 'Rider'}
+            Welcome, {getDisplayName()}
           </Text>
           <Text style={styles.subtitleText}>Your journey starts here</Text>
         </View>
