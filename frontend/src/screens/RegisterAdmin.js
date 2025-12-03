@@ -17,6 +17,7 @@ import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { auth } from "../config/firebaseConfig";
 
+
 const ALLOWED_POSITIONS = [
   "Processing of E-bike Registration",
   "Validator of E-bike Registration",
@@ -24,6 +25,7 @@ const ALLOWED_POSITIONS = [
   "Office Supervisor",
   "Community Affairs Officer"
 ];
+
 
 export default function RegisterAdmin({ navigation }) {
   const [activeSection, setActiveSection] = useState('personal');
@@ -42,18 +44,25 @@ export default function RegisterAdmin({ navigation }) {
     confirmPassword: ""
   });
 
+
   const [loading, setLoading] = useState(false);
   const [positionModalVisible, setPositionModalVisible] = useState(false);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
   const [birthdayDate, setBirthdayDate] = useState(new Date());
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const firstInitial = form.firstName.charAt(0).toUpperCase();
+  const lastInitial  = form.lastName.charAt(0).toUpperCase();
+  const employeeNum  = form.employeeNumber;
   const scrollViewRef = useRef(null);
   const db = getFirestore();
+
 
   const handleBirthdayChange = (event, selectedDate) => {
     if (Platform.OS === 'android') {
       setShowBirthdayPicker(false);
     }
-    
+   
     if (selectedDate) {
       setBirthdayDate(selectedDate);
       const formattedDate = selectedDate.toLocaleDateString('en-US', {
@@ -65,35 +74,47 @@ export default function RegisterAdmin({ navigation }) {
     }
   };
 
+
   const formatBirthdayDisplay = (dateString) => {
     if (!dateString) return 'Select Birthday';
     return dateString;
   };
 
+
   const update = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
+
 
   const isValidEmployeeNumber = (empNum) => {
     const employeeNumberRegex = /^\d{4}$/;
     return employeeNumberRegex.test(empNum);
   };
 
+
+  const expectedPattern = new RegExp(
+    `^${firstInitial}${lastInitial}[0-9]{6}${employeeNum}$`
+  );
+
+
   const isValidEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
+
 
   const isValidContactNumber = (phone) => {
     const digitsOnly = phone.replace(/[^0-9]/g, '');
     return digitsOnly.length >= 10 && digitsOnly.length <= 11;
   };
 
+
   const validatePersonalInfo = () => {
     const personalFields = [
-      'firstName', 'lastName', 'birthday', 
+      'firstName', 'lastName', 'birthday',
       'contactNumber', 'address'
     ];
+
 
     for (let field of personalFields) {
       if (!form[field] || form[field].trim() === '') {
@@ -102,19 +123,23 @@ export default function RegisterAdmin({ navigation }) {
       }
     }
 
+
     if (!isValidContactNumber(form.contactNumber)) {
       Alert.alert('Error', 'Contact number must be 10-11 digits');
       return false;
     }
 
+
     return true;
   };
 
+
   const validateWorkInfo = () => {
     const workFields = [
-      'employeeNumber', 'department', 'position', 
+      'employeeNumber', 'department', 'position',
       'email', 'password', 'confirmPassword'
     ];
+
 
     for (let field of workFields) {
       if (!form[field] || form[field].trim() === '') {
@@ -123,45 +148,55 @@ export default function RegisterAdmin({ navigation }) {
       }
     }
 
+
     if (!isValidEmployeeNumber(form.employeeNumber)) {
       Alert.alert('Error', 'Employee number must be exactly 4 digits');
       return false;
     }
+
 
     if (!isValidEmail(form.email)) {
       Alert.alert('Error', 'Please enter a valid email address');
       return false;
     }
 
+
     if (!ALLOWED_POSITIONS.includes(form.position)) {
       Alert.alert('Error', 'Please select a valid position');
       return false;
     }
 
-    if (form.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
-      return false;
-    }
+
+   if (!expectedPattern.test(form.password)) {
+    Alert.alert("Error", "Invalid password format.");
+    return false;
+    }  
+
 
     if (form.password !== form.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return false;
+    Alert.alert("Error", "Passwords do not match.");
+    return false;
     }
+
 
     return true;
   };
 
+
   const handleSubmit = async () => {
     if (!validateWorkInfo()) return;
 
+
     setLoading(true);
+
 
     try {
       const employeeQuery = query(
-        collection(db, "users"), 
+        collection(db, "users"),
         where("employeeNumber", "==", form.employeeNumber)
       );
       const employeeSnapshot = await getDocs(employeeQuery);
+
 
       if (!employeeSnapshot.empty) {
         Alert.alert('Error', 'Employee number already exists');
@@ -169,11 +204,13 @@ export default function RegisterAdmin({ navigation }) {
         return;
       }
 
+
       const emailQuery = query(
-        collection(db, "users"), 
+        collection(db, "users"),
         where("email", "==", form.email)
       );
       const emailSnapshot = await getDocs(emailQuery);
+
 
       if (!emailSnapshot.empty) {
         Alert.alert('Error', 'Email already exists');
@@ -181,11 +218,13 @@ export default function RegisterAdmin({ navigation }) {
         return;
       }
 
+
       const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        form.email, 
+        auth,
+        form.email,
         form.password
       );
+
 
       await addDoc(collection(db, "users"), {
         uid: userCredential.user.uid,
@@ -204,8 +243,9 @@ export default function RegisterAdmin({ navigation }) {
         status: "active"
       });
 
+
       Alert.alert(
-        'Success', 
+        'Success',
         'Admin account created successfully',
         [{ text: 'OK', onPress: () => navigation.replace('Login') }]
       );
@@ -216,10 +256,11 @@ export default function RegisterAdmin({ navigation }) {
     }
   };
 
+
   const renderPersonalSection = () => (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Personal Information</Text>
-      
+     
       <Text style={styles.fieldLabel}>First Name</Text>
       <TextInput
         style={styles.input}
@@ -228,7 +269,7 @@ export default function RegisterAdmin({ navigation }) {
         value={form.firstName}
         onChangeText={(v) => update('firstName', v)}
       />
-      
+     
       <Text style={styles.fieldLabel}>Middle Name (Optional)</Text>
       <TextInput
         style={styles.input}
@@ -237,7 +278,7 @@ export default function RegisterAdmin({ navigation }) {
         value={form.middleName}
         onChangeText={(v) => update('middleName', v)}
       />
-      
+     
       <Text style={styles.fieldLabel}>Last Name</Text>
       <TextInput
         style={styles.input}
@@ -246,9 +287,9 @@ export default function RegisterAdmin({ navigation }) {
         value={form.lastName}
         onChangeText={(v) => update('lastName', v)}
       />
-      
+     
       <Text style={styles.fieldLabel}>Birthday</Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.datePickerInput}
         onPress={() => setShowBirthdayPicker(true)}
       >
@@ -257,6 +298,7 @@ export default function RegisterAdmin({ navigation }) {
         </Text>
         <Text style={styles.datePickerIcon}>📅</Text>
       </TouchableOpacity>
+
 
       {showBirthdayPicker && (
         <DateTimePicker
@@ -267,10 +309,10 @@ export default function RegisterAdmin({ navigation }) {
           maximumDate={new Date()}
         />
       )}
-      
+     
       {Platform.OS === 'ios' && showBirthdayPicker && (
         <View style={styles.iosBirthdayPickerButtons}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.iosBirthdayButton}
             onPress={() => setShowBirthdayPicker(false)}
           >
@@ -278,7 +320,7 @@ export default function RegisterAdmin({ navigation }) {
           </TouchableOpacity>
         </View>
       )}
-      
+     
       <Text style={styles.fieldLabel}>Contact Number</Text>
       <TextInput
         style={styles.input}
@@ -292,7 +334,7 @@ export default function RegisterAdmin({ navigation }) {
         keyboardType="phone-pad"
         maxLength={11}
       />
-      
+     
       <Text style={styles.fieldLabel}>Address</Text>
       <TextInput
         style={styles.input}
@@ -303,6 +345,7 @@ export default function RegisterAdmin({ navigation }) {
       />
     </View>
   );
+
 
   const renderWorkSection = () => (
     <View style={styles.formSection}>
@@ -315,20 +358,20 @@ export default function RegisterAdmin({ navigation }) {
         </View>
       </View> */}
       <Text style={styles.sectionTitle}>Work Information</Text>
-      
+     
       <Text style={styles.fieldLabel}>Employee Number</Text>
       <TextInput
         style={styles.input}
-        placeholder="Employee Number (4 digits)"
+        placeholder="Employee Number"
         placeholderTextColor="#999"
         value={form.employeeNumber}
         onChangeText={(v) => update('employeeNumber', v.replace(/[^0-9]/g, '').slice(0, 4))}
         keyboardType="numeric"
         maxLength={4}
       />
-      
+     
       <Text style={styles.fieldLabel}>Position</Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.dropdownInput}
         onPress={() => setPositionModalVisible(true)}
       >
@@ -337,6 +380,7 @@ export default function RegisterAdmin({ navigation }) {
         </Text>
         <Text style={styles.dropdownIcon}>▼</Text>
       </TouchableOpacity>
+
 
       <Modal
         transparent={true}
@@ -352,7 +396,7 @@ export default function RegisterAdmin({ navigation }) {
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            
+           
             <FlatList
               data={ALLOWED_POSITIONS}
               keyExtractor={(item, index) => index.toString()}
@@ -382,7 +426,7 @@ export default function RegisterAdmin({ navigation }) {
           </View>
         </View>
       </Modal>
-      
+     
       <Text style={styles.fieldLabel}>Email</Text>
       <TextInput
         style={styles.input}
@@ -393,17 +437,17 @@ export default function RegisterAdmin({ navigation }) {
         keyboardType="email-address"
         autoCapitalize="none"
       />
-      
+     
       <Text style={styles.fieldLabel}>Password</Text>
       <TextInput
         style={styles.input}
-        placeholder="Password (min. 6 characters)"
+        placeholder="Password"
         placeholderTextColor="#999"
         value={form.password}
         onChangeText={(v) => update('password', v)}
         secureTextEntry
       />
-      
+     
       <Text style={styles.fieldLabel}>Confirm Password</Text>
       <TextInput
         style={styles.input}
@@ -414,15 +458,17 @@ export default function RegisterAdmin({ navigation }) {
         secureTextEntry
       />
 
+
       <View style={styles.spacer} />
     </View>
   );
 
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButtonHeader} 
+        <TouchableOpacity
+          style={styles.backButtonHeader}
           onPress={() => navigation.goBack()}
         >
           <Text style={styles.backText}>◂</Text>
@@ -430,7 +476,8 @@ export default function RegisterAdmin({ navigation }) {
         <Text style={styles.headerTitle}>Create Admin Account</Text>
       </View>
 
-      <ScrollView 
+
+      <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -438,18 +485,19 @@ export default function RegisterAdmin({ navigation }) {
       >
         {activeSection === 'personal' ? renderPersonalSection() : renderWorkSection()}
 
+
         <View style={styles.navigationButtons}>
           {activeSection === 'work' && (
-            <TouchableOpacity 
-              style={[styles.button, styles.backButtonStyle]} 
+            <TouchableOpacity
+              style={[styles.button, styles.backButtonStyle]}
               onPress={() => setActiveSection('personal')}
             >
               <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
           )}
-          
-          <TouchableOpacity 
-            style={[styles.button, styles.nextButton, loading && styles.buttonDisabled]} 
+         
+          <TouchableOpacity
+            style={[styles.button, styles.nextButton, loading && styles.buttonDisabled]}
             onPress={() => {
               if (activeSection === 'personal') {
                 if (validatePersonalInfo()) setActiveSection('work');
@@ -468,6 +516,7 @@ export default function RegisterAdmin({ navigation }) {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -700,3 +749,6 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   }
 });
+
+
+
