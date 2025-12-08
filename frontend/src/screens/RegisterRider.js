@@ -9,6 +9,7 @@ import {
   ScrollView,
   Alert,
   Platform,
+  KeyboardAvoidingView, // ✅ NEW
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { auth } from "../config/firebaseConfig";
@@ -49,6 +50,11 @@ function RegisterRider({ navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ✅ NEW STATES
+  const [noPlateNumber, setNoPlateNumber] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -64,9 +70,11 @@ function RegisterRider({ navigation }) {
     return cleaned.slice(0, 11); // Max 11 digits
   };
 
+  // ✅ UPDATED: must start with 09 and be 11 digits
   const validateContactNumber = (contactNumber) => {
-    const phoneRegex = /^[0-9]{10,11}$/;
-    return phoneRegex.test(contactNumber.replace(/\D/g, ""));
+    const cleaned = contactNumber.replace(/\D/g, "");
+    const phoneRegex = /^09\d{9}$/; // 09 + 9 digits = 11 digits
+    return phoneRegex.test(cleaned);
   };
 
   const validateAge = (birthday) => {
@@ -134,8 +142,12 @@ function RegisterRider({ navigation }) {
       return false;
     }
 
+    // ✅ UPDATED MESSAGE FOR NEW CONTACT VALIDATION
     if (!validateContactNumber(form.contactNumber)) {
-      Alert.alert("Error", "Contact number must be 10-11 digits");
+      Alert.alert(
+        "Error",
+        "Contact number must start with 09 and have 11 digits"
+      );
       return false;
     }
 
@@ -155,6 +167,11 @@ function RegisterRider({ navigation }) {
     ];
 
     for (let field of ebikeFields) {
+      // ✅ SKIP plateNumber required check if noPlateNumber is true
+      if (field.key === "plateNumber" && noPlateNumber) {
+        continue;
+      }
+
       const value = form[field.key];
       if (
         value === null ||
@@ -182,7 +199,8 @@ function RegisterRider({ navigation }) {
       return false;
     }
 
-    if (!validatePlateNumber(form.plateNumber)) {
+    // ✅ Only validate plate format when rider actually has a plate number
+    if (!noPlateNumber && !validatePlateNumber(form.plateNumber)) {
       Alert.alert(
         "Error",
         "Plate Number must be in format: 2 letters followed by 4 numbers (e.g., AB1234)"
@@ -211,22 +229,28 @@ function RegisterRider({ navigation }) {
 
     try {
       const normalizedEmail = form.email.trim().toLowerCase();
-      const normalizedPlateNumber = form.plateNumber.trim().toUpperCase();
 
-      console.log("Checking plate number...");
-      const plateQuery = query(
-        collection(db, "users"),
-        where("plateNumber", "==", normalizedPlateNumber)
-      );
-      const plateSnapshot = await getDocs(plateQuery);
+      // ✅ Handle "no plate yet" case
+      const normalizedPlateNumber = noPlateNumber
+        ? "NO-PLATE"
+        : form.plateNumber.trim().toUpperCase();
 
-      if (!plateSnapshot.empty) {
-        Alert.alert(
-          "Error",
-          "This plate number is already registered. Please use a different plate number."
+      if (!noPlateNumber) {
+        console.log("Checking plate number...");
+        const plateQuery = query(
+          collection(db, "users"),
+          where("plateNumber", "==", normalizedPlateNumber)
         );
-        setLoading(false);
-        return;
+        const plateSnapshot = await getDocs(plateQuery);
+
+        if (!plateSnapshot.empty) {
+          Alert.alert(
+            "Error",
+            "This plate number is already registered. Please use a different plate number."
+          );
+          setLoading(false);
+          return;
+        }
       }
 
       console.log("Checking email...");
@@ -268,7 +292,7 @@ function RegisterRider({ navigation }) {
             ? "none"
             : form.chassisMotorNumber,
         branch: form.branch.trim(),
-        plateNumber: normalizedPlateNumber,
+        plateNumber: normalizedPlateNumber, // ✅ now can be "NO-PLATE"
         email: normalizedEmail,
         role: "Rider",
         status: "Pending",
@@ -411,7 +435,7 @@ function RegisterRider({ navigation }) {
         <View style={styles.inputCard}>
           <TextInput
             style={styles.input}
-            placeholder="10–11 digit contact number"
+            placeholder="09XXXXXXXXX"
             placeholderTextColor="#999"
             value={form.contactNumber}
             onChangeText={(v) => update("contactNumber", formatPhoneNumber(v))}
@@ -523,7 +547,7 @@ function RegisterRider({ navigation }) {
         </View>
       </View>
 
-      {/* Plate Number */}
+      {/* Plate Number + Checkbox */}
       <View style={styles.fieldContainer}>
         <Text style={styles.fieldLabel}>Plate Number</Text>
         <View style={styles.inputCard}>
@@ -533,13 +557,34 @@ function RegisterRider({ navigation }) {
             placeholderTextColor="#999"
             value={form.plateNumber}
             onChangeText={(v) => update("plateNumber", v.toUpperCase())}
-            editable={!loading}
+            editable={!loading && !noPlateNumber} // ✅ disable when checkbox is checked
             maxLength={6}
           />
         </View>
         <Text style={styles.helpText}>
           Format: 2 letters followed by 4 numbers (e.g., AB1234)
         </Text>
+
+        {/* ✅ NEW CHECKBOX */}
+        <View style={styles.checkboxRow}>
+          <TouchableOpacity
+            style={[styles.checkbox, noPlateNumber && styles.checkboxChecked]}
+            onPress={() => {
+              if (loading) return;
+              setNoPlateNumber((prev) => !prev);
+              if (!noPlateNumber) {
+                // just checked: clear plate number
+                update("plateNumber", "");
+              }
+            }}
+          >
+            {noPlateNumber && <Text style={styles.checkboxTick}>✓</Text>}
+          </TouchableOpacity>
+          <Text style={styles.checkboxLabel}>
+            Check this if this is your e-bike&apos;s first registration and you
+            don&apos;t have a plate number yet.
+          </Text>
+        </View>
       </View>
 
       {/* Email */}
@@ -559,35 +604,51 @@ function RegisterRider({ navigation }) {
         </View>
       </View>
 
-      {/* Password */}
+      {/* Password with show/hide */}
       <View style={styles.fieldContainer}>
         <Text style={styles.fieldLabel}>Password</Text>
-        <View style={styles.inputCard}>
+        <View style={[styles.inputCard, styles.passwordRow]}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.passwordInput]}
             placeholder="Minimum 6 characters"
             placeholderTextColor="#999"
             value={form.password}
             onChangeText={(v) => update("password", v)}
-            secureTextEntry
+            secureTextEntry={!showPassword}
             editable={!loading}
           />
+          <TouchableOpacity
+            onPress={() => !loading && setShowPassword((prev) => !prev)}
+          >
+            <Text style={styles.toggleText}>
+              {showPassword ? "Hide" : "Show"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Confirm Password */}
+      {/* Confirm Password with show/hide */}
       <View style={styles.fieldContainer}>
         <Text style={styles.fieldLabel}>Confirm Password</Text>
-        <View style={styles.inputCard}>
+        <View style={[styles.inputCard, styles.passwordRow]}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.passwordInput]}
             placeholder="Re-enter password"
             placeholderTextColor="#999"
             value={form.confirmPassword}
             onChangeText={(v) => update("confirmPassword", v)}
-            secureTextEntry
+            secureTextEntry={!showConfirmPassword}
             editable={!loading}
           />
+          <TouchableOpacity
+            onPress={() =>
+              !loading && setShowConfirmPassword((prev) => !prev)
+            }
+          >
+            <Text style={styles.toggleText}>
+              {showConfirmPassword ? "Hide" : "Show"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -595,68 +656,76 @@ function RegisterRider({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 🔹 Green header bar like the other screen */}
-      <View style={styles.greenHeader}>
-        <Text style={styles.greenHeaderText}>AIDE</Text>
-      </View>
+      {/* ✅ KeyboardAvoidingView para di matakpan ng keyboard */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+      >
+        {/* 🔹 Green header bar like the other screen */}
+        <View style={styles.greenHeader}>
+          <Text style={styles.greenHeaderText}>AIDE</Text>
+        </View>
 
-      <View style={styles.headerContainer}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => !loading && navigation.goBack()}
-          disabled={loading}
-        >
-          <Text style={styles.backText}>◂</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create an account</Text>
-      </View>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => !loading && navigation.goBack()}
+            disabled={loading}
+          >
+            <Text style={styles.backText}>◂</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Create an account</Text>
+        </View>
 
-      <View style={styles.contentContainer}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          {activeSection === "personal"
-            ? renderPersonalSection()
-            : renderEbikeSection()}
+        <View style={styles.contentContainer}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag" // ✅ helpful with keyboard
+          >
+            {activeSection === "personal"
+              ? renderPersonalSection()
+              : renderEbikeSection()}
 
-          <View style={styles.navigationButtons}>
-            {activeSection === "ebike" && (
+            <View style={styles.navigationButtons}>
+              {activeSection === "ebike" && (
+                <TouchableOpacity
+                  style={[styles.button, styles.backButtonStyle]}
+                  onPress={() => setActiveSection("personal")}
+                  disabled={loading}
+                >
+                  <Text style={styles.backButtonText}>Back</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
-                style={[styles.button, styles.backButtonStyle]}
-                onPress={() => setActiveSection("personal")}
+                style={[
+                  styles.button,
+                  styles.nextButton,
+                  loading && styles.buttonDisabled,
+                ]}
+                onPress={() => {
+                  if (activeSection === "personal") {
+                    if (validatePersonalInfo()) setActiveSection("ebike");
+                  } else {
+                    handleSubmit();
+                  }
+                }}
                 disabled={loading}
               >
-                <Text style={styles.backButtonText}>Back</Text>
+                <Text style={styles.nextButtonText}>
+                  {loading
+                    ? "Loading..."
+                    : activeSection === "personal"
+                    ? "Next"
+                    : "Submit"}
+                </Text>
               </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[
-                styles.button,
-                styles.nextButton,
-                loading && styles.buttonDisabled,
-              ]}
-              onPress={() => {
-                if (activeSection === "personal") {
-                  if (validatePersonalInfo()) setActiveSection("ebike");
-                } else {
-                  handleSubmit();
-                }
-              }}
-              disabled={loading}
-            >
-              <Text style={styles.nextButtonText}>
-                {loading
-                  ? "Loading..."
-                  : activeSection === "personal"
-                  ? "Next"
-                  : "Submit"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -806,6 +875,54 @@ const styles = StyleSheet.create({
   nextButtonText: {
     color: "#FFFFFF",
     fontWeight: "500",
+  },
+
+  // ✅ NEW styles for password show/hide
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  passwordInput: {
+    flex: 1,
+    marginRight: 10,
+  },
+  toggleText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#2E7D32",
+  },
+
+  // ✅ NEW styles for checkbox
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#999",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+    backgroundColor: "#FFF",
+  },
+  checkboxChecked: {
+    backgroundColor: "#4CAF50",
+    borderColor: "#4CAF50",
+  },
+  checkboxTick: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  checkboxLabel: {
+    flex: 1,
+    fontSize: 12,
+    color: "#444",
   },
 });
 

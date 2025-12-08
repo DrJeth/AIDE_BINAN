@@ -25,7 +25,8 @@ import { app } from "../config/firebaseConfig";
 import EditProfileModal from "./EditProfileModal";
 import TermsService from "./TermsService";
 import ContactUs from "./ContactUs";
-import Settings from "./Settings";
+// ⬇️ gamitin na si SettingRider imbes na Settings (admin)
+import SettingsRider from "./SettingRider";
 
 const DEFAULT_AVATAR = require("../../assets/me.png");
 
@@ -200,7 +201,14 @@ export default function Me({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header with ◂ Back + centered Profile */}
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backText}>◂ Back</Text>
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
       
@@ -320,11 +328,11 @@ export default function Me({ navigation }) {
         onClose={() => setIsContactUsModalVisible(false)}
       />
 
-      {/* Settings Modal */}
-      <Settings
+      {/* Settings Modal for Rider */}
+      <SettingsRider
         visible={isSettingsModalVisible}
         onClose={() => setIsSettingsModalVisible(false)}
-        onPressLogout={onLogout}
+        userName={getFullName()}
       />
     </SafeAreaView>
   );
@@ -344,8 +352,22 @@ const styles = StyleSheet.create({
   header: {
     height: 72,
     backgroundColor: "#2e7d32",
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",   // center si "Profile"
     paddingHorizontal: 16,
+    position: "relative",
+  },
+  backButton: {
+    position: "absolute",
+    left: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  backText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500",
   },
   headerTitle: { 
     color: "#fff", 

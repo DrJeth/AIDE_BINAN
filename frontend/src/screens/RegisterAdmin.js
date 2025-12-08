@@ -10,25 +10,31 @@ import {
   Alert,
   Platform,
   Modal,
-  FlatList
+  FlatList,
+  KeyboardAvoidingView, // ✅ ADDED
 } from "react-native";
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { auth } from "../config/firebaseConfig";
-
 
 const ALLOWED_POSITIONS = [
   "Processing of E-bike Registration",
   "Validator of E-bike Registration",
   "Inspection",
   "Office Supervisor",
-  "Community Affairs Officer"
+  "Community Affairs Officer",
 ];
 
-
 export default function RegisterAdmin({ navigation }) {
-  const [activeSection, setActiveSection] = useState('personal');
+  const [activeSection, setActiveSection] = useState("personal");
   const [form, setForm] = useState({
     firstName: "",
     middleName: "",
@@ -41,154 +47,150 @@ export default function RegisterAdmin({ navigation }) {
     position: "",
     email: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
   });
-
 
   const [loading, setLoading] = useState(false);
   const [positionModalVisible, setPositionModalVisible] = useState(false);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
   const [birthdayDate, setBirthdayDate] = useState(new Date());
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // ✅ USED NOW
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // ✅ USED NOW
   const firstInitial = form.firstName.charAt(0).toUpperCase();
-  const lastInitial  = form.lastName.charAt(0).toUpperCase();
-  const employeeNum  = form.employeeNumber;
+  const lastInitial = form.lastName.charAt(0).toUpperCase();
+  const employeeNum = form.employeeNumber;
   const scrollViewRef = useRef(null);
   const db = getFirestore();
 
-
   const handleBirthdayChange = (event, selectedDate) => {
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       setShowBirthdayPicker(false);
     }
-   
+
     if (selectedDate) {
       setBirthdayDate(selectedDate);
-      const formattedDate = selectedDate.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
+      const formattedDate = selectedDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
       });
-      update('birthday', formattedDate);
+      update("birthday", formattedDate);
     }
   };
 
-
   const formatBirthdayDisplay = (dateString) => {
-    if (!dateString) return 'Select Birthday';
+    if (!dateString) return "Select Birthday";
     return dateString;
   };
 
-
   const update = (key, value) => {
-    setForm(prev => ({ ...prev, [key]: value }));
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
-
 
   const isValidEmployeeNumber = (empNum) => {
     const employeeNumberRegex = /^\d{4}$/;
     return employeeNumberRegex.test(empNum);
   };
 
-
   const expectedPattern = new RegExp(
     `^${firstInitial}${lastInitial}[0-9]{6}${employeeNum}$`
   );
-
 
   const isValidEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
 
-
+  // ✅ UPDATED: must start with 09 and be exactly 11 digits
   const isValidContactNumber = (phone) => {
-    const digitsOnly = phone.replace(/[^0-9]/g, '');
-    return digitsOnly.length >= 10 && digitsOnly.length <= 11;
+    const digitsOnly = phone.replace(/[^0-9]/g, "");
+    const phoneRegex = /^09\d{9}$/; // 09 + 9 digits = 11
+    return phoneRegex.test(digitsOnly);
   };
-
 
   const validatePersonalInfo = () => {
     const personalFields = [
-      'firstName', 'lastName', 'birthday',
-      'contactNumber', 'address'
+      "firstName",
+      "lastName",
+      "birthday",
+      "contactNumber",
+      "address",
     ];
 
-
     for (let field of personalFields) {
-      if (!form[field] || form[field].trim() === '') {
-        Alert.alert('Error', `Please fill in ${field.replace(/([A-Z])/g, ' $1')}`);
+      if (!form[field] || form[field].trim() === "") {
+        Alert.alert(
+          "Error",
+          `Please fill in ${field.replace(/([A-Z])/g, " $1")}`
+        );
         return false;
       }
     }
 
-
     if (!isValidContactNumber(form.contactNumber)) {
-      Alert.alert('Error', 'Contact number must be 10-11 digits');
+      Alert.alert(
+        "Error",
+        "Contact number must start with 09 and have 11 digits"
+      );
       return false;
     }
 
-
     return true;
   };
-
 
   const validateWorkInfo = () => {
     const workFields = [
-      'employeeNumber', 'department', 'position',
-      'email', 'password', 'confirmPassword'
+      "employeeNumber",
+      "department",
+      "position",
+      "email",
+      "password",
+      "confirmPassword",
     ];
 
-
     for (let field of workFields) {
-      if (!form[field] || form[field].trim() === '') {
-        Alert.alert('Error', `Please fill in ${field.replace(/([A-Z])/g, ' $1')}`);
+      if (!form[field] || form[field].trim() === "") {
+        Alert.alert(
+          "Error",
+          `Please fill in ${field.replace(/([A-Z])/g, " $1")}`
+        );
         return false;
       }
     }
 
-
     if (!isValidEmployeeNumber(form.employeeNumber)) {
-      Alert.alert('Error', 'Employee number must be exactly 4 digits');
+      Alert.alert("Error", "Employee number must be exactly 4 digits");
       return false;
     }
-
 
     if (!isValidEmail(form.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert("Error", "Please enter a valid email address");
       return false;
     }
-
 
     if (!ALLOWED_POSITIONS.includes(form.position)) {
-      Alert.alert('Error', 'Please select a valid position');
+      Alert.alert("Error", "Please select a valid position");
       return false;
     }
 
-
-   if (!expectedPattern.test(form.password)) {
-    Alert.alert("Error", "Invalid password format.");
-    return false;
-    }  
-
-
-    if (form.password !== form.confirmPassword) {
-    Alert.alert("Error", "Passwords do not match.");
-    return false;
+    // ✅ still using your original expectedPattern validation
+    if (!expectedPattern.test(form.password)) {
+      Alert.alert("Error", "Invalid password format.");
+      return false;
     }
 
+    if (form.password !== form.confirmPassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return false;
+    }
 
     return true;
   };
-
 
   const handleSubmit = async () => {
     if (!validateWorkInfo()) return;
 
-
     setLoading(true);
-
 
     try {
       const employeeQuery = query(
@@ -197,13 +199,11 @@ export default function RegisterAdmin({ navigation }) {
       );
       const employeeSnapshot = await getDocs(employeeQuery);
 
-
       if (!employeeSnapshot.empty) {
-        Alert.alert('Error', 'Employee number already exists');
+        Alert.alert("Error", "Employee number already exists");
         setLoading(false);
         return;
       }
-
 
       const emailQuery = query(
         collection(db, "users"),
@@ -211,20 +211,17 @@ export default function RegisterAdmin({ navigation }) {
       );
       const emailSnapshot = await getDocs(emailQuery);
 
-
       if (!emailSnapshot.empty) {
-        Alert.alert('Error', 'Email already exists');
+        Alert.alert("Error", "Email already exists");
         setLoading(false);
         return;
       }
-
 
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         form.email,
         form.password
       );
-
 
       await addDoc(collection(db, "users"), {
         uid: userCredential.user.uid,
@@ -240,77 +237,77 @@ export default function RegisterAdmin({ navigation }) {
         email: form.email,
         role: "Admin",
         createdAt: new Date().toISOString(),
-        status: "active"
+        status: "active",
       });
 
-
-      Alert.alert(
-        'Success',
-        'Admin account created successfully',
-        [{ text: 'OK', onPress: () => navigation.replace('Login') }]
-      );
+      Alert.alert("Success", "Admin account created successfully", [
+        { text: "OK", onPress: () => navigation.replace("Login") },
+      ]);
     } catch (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert("Error", error.message);
     } finally {
       setLoading(false);
     }
   };
 
-
   const renderPersonalSection = () => (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Personal Information</Text>
-     
+
       <Text style={styles.fieldLabel}>First Name</Text>
       <TextInput
         style={styles.input}
         placeholder="First Name"
         placeholderTextColor="#999"
         value={form.firstName}
-        onChangeText={(v) => update('firstName', v)}
+        onChangeText={(v) => update("firstName", v)}
       />
-     
+
       <Text style={styles.fieldLabel}>Middle Name (Optional)</Text>
       <TextInput
         style={styles.input}
         placeholder="Middle Name (Optional)"
         placeholderTextColor="#999"
         value={form.middleName}
-        onChangeText={(v) => update('middleName', v)}
+        onChangeText={(v) => update("middleName", v)}
       />
-     
+
       <Text style={styles.fieldLabel}>Last Name</Text>
       <TextInput
         style={styles.input}
         placeholder="Last Name"
         placeholderTextColor="#999"
         value={form.lastName}
-        onChangeText={(v) => update('lastName', v)}
+        onChangeText={(v) => update("lastName", v)}
       />
-     
+
       <Text style={styles.fieldLabel}>Birthday</Text>
       <TouchableOpacity
         style={styles.datePickerInput}
         onPress={() => setShowBirthdayPicker(true)}
       >
-        <Text style={[styles.datePickerText, !form.birthday && styles.placeholderText]}>
+        <Text
+          style={[
+            styles.datePickerText,
+            !form.birthday && styles.placeholderText,
+          ]}
+        >
           {formatBirthdayDisplay(form.birthday)}
         </Text>
         <Text style={styles.datePickerIcon}>📅</Text>
       </TouchableOpacity>
 
-
       {showBirthdayPicker && (
         <DateTimePicker
           value={birthdayDate}
           mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={handleBirthdayChange}
           maximumDate={new Date()}
         />
       )}
-     
-      {Platform.OS === 'ios' && showBirthdayPicker && (
+
+      {Platform.OS === "ios" && showBirthdayPicker && (
         <View style={styles.iosBirthdayPickerButtons}>
           <TouchableOpacity
             style={styles.iosBirthdayButton}
@@ -320,67 +317,64 @@ export default function RegisterAdmin({ navigation }) {
           </TouchableOpacity>
         </View>
       )}
-     
+
       <Text style={styles.fieldLabel}>Contact Number</Text>
       <TextInput
         style={styles.input}
-        placeholder="Contact Number (10-11 digits)"
+        placeholder="09XXXXXXXXX"
         placeholderTextColor="#999"
         value={form.contactNumber}
         onChangeText={(v) => {
-          const digitsOnly = v.replace(/[^0-9]/g, '').slice(0, 11);
-          update('contactNumber', digitsOnly);
+          const digitsOnly = v.replace(/[^0-9]/g, "").slice(0, 11);
+          update("contactNumber", digitsOnly);
         }}
         keyboardType="phone-pad"
         maxLength={11}
       />
-     
+
       <Text style={styles.fieldLabel}>Address</Text>
       <TextInput
         style={styles.input}
         placeholder="Address"
         placeholderTextColor="#999"
         value={form.address}
-        onChangeText={(v) => update('address', v)}
+        onChangeText={(v) => update("address", v)}
       />
     </View>
   );
 
-
   const renderWorkSection = () => (
     <View style={styles.formSection}>
-      {/* <View style={styles.departmentContainer}>
-        <Text style={styles.departmentLabel}>Department</Text>
-        <View style={styles.departmentValue}>
-          <Text style={styles.departmentText}>
-            Binan Tricycle Franchising And Regulatory Board
-          </Text>
-        </View>
-      </View> */}
       <Text style={styles.sectionTitle}>Work Information</Text>
-     
+
       <Text style={styles.fieldLabel}>Employee Number</Text>
       <TextInput
         style={styles.input}
         placeholder="Employee Number"
         placeholderTextColor="#999"
         value={form.employeeNumber}
-        onChangeText={(v) => update('employeeNumber', v.replace(/[^0-9]/g, '').slice(0, 4))}
+        onChangeText={(v) =>
+          update("employeeNumber", v.replace(/[^0-9]/g, "").slice(0, 4))
+        }
         keyboardType="numeric"
         maxLength={4}
       />
-     
+
       <Text style={styles.fieldLabel}>Position</Text>
       <TouchableOpacity
         style={styles.dropdownInput}
         onPress={() => setPositionModalVisible(true)}
       >
-        <Text style={[styles.dropdownText, !form.position && styles.placeholderText]}>
+        <Text
+          style={[
+            styles.dropdownText,
+            !form.position && styles.placeholderText,
+          ]}
+        >
           {form.position || "Select Position"}
         </Text>
         <Text style={styles.dropdownIcon}>▼</Text>
       </TouchableOpacity>
-
 
       <Modal
         transparent={true}
@@ -392,11 +386,13 @@ export default function RegisterAdmin({ navigation }) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Position</Text>
-              <TouchableOpacity onPress={() => setPositionModalVisible(false)}>
+              <TouchableOpacity
+                onPress={() => setPositionModalVisible(false)}
+              >
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-           
+
             <FlatList
               data={ALLOWED_POSITIONS}
               keyExtractor={(item, index) => index.toString()}
@@ -404,17 +400,20 @@ export default function RegisterAdmin({ navigation }) {
                 <TouchableOpacity
                   style={[
                     styles.positionItem,
-                    form.position === item && styles.positionItemSelected
+                    form.position === item && styles.positionItemSelected,
                   ]}
                   onPress={() => {
-                    update('position', item);
+                    update("position", item);
                     setPositionModalVisible(false);
                   }}
                 >
-                  <Text style={[
-                    styles.positionItemText,
-                    form.position === item && styles.positionItemTextSelected
-                  ]}>
+                  <Text
+                    style={[
+                      styles.positionItemText,
+                      form.position === item &&
+                        styles.positionItemTextSelected,
+                    ]}
+                  >
                     {item}
                   </Text>
                   {form.position === item && (
@@ -426,329 +425,381 @@ export default function RegisterAdmin({ navigation }) {
           </View>
         </View>
       </Modal>
-     
+
       <Text style={styles.fieldLabel}>Email</Text>
       <TextInput
         style={styles.input}
         placeholder="Email"
         placeholderTextColor="#999"
         value={form.email}
-        onChangeText={(v) => update('email', v)}
+        onChangeText={(v) => update("email", v)}
         keyboardType="email-address"
         autoCapitalize="none"
       />
-     
+
+      {/* ✅ PASSWORD WITH SHOW/HIDE */}
       <Text style={styles.fieldLabel}>Password</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#999"
-        value={form.password}
-        onChangeText={(v) => update('password', v)}
-        secureTextEntry
-      />
-     
+      <View style={[styles.input, styles.passwordRow]}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Password"
+          placeholderTextColor="#999"
+          value={form.password}
+          onChangeText={(v) => update("password", v)}
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity
+          onPress={() => setShowPassword((prev) => !prev)}
+          disabled={loading}
+        >
+          <Text style={styles.toggleText}>
+            {showPassword ? "Hide" : "Show"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ✅ CONFIRM PASSWORD WITH SHOW/HIDE */}
       <Text style={styles.fieldLabel}>Confirm Password</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        placeholderTextColor="#999"
-        value={form.confirmPassword}
-        onChangeText={(v) => update('confirmPassword', v)}
-        secureTextEntry
-      />
+      <View style={[styles.input, styles.passwordRow]}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Confirm Password"
+          placeholderTextColor="#999"
+          value={form.confirmPassword}
+          onChangeText={(v) => update("confirmPassword", v)}
+          secureTextEntry={!showConfirmPassword}
+        />
+        <TouchableOpacity
+          onPress={() => setShowConfirmPassword((prev) => !prev)}
+          disabled={loading}
+        >
+          <Text style={styles.toggleText}>
+            {showConfirmPassword ? "Hide" : "Show"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-
-      <View style={styles.spacer} />
+      <View className="spacer" style={styles.spacer} />
     </View>
   );
 
-
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <TouchableOpacity
-          style={styles.backButtonHeader}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backText}>◂</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Admin Account</Text>
-      </View>
-
-
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      {/* ✅ KeyboardAvoidingView to prevent keyboard from covering fields */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
       >
-        {activeSection === 'personal' ? renderPersonalSection() : renderWorkSection()}
-
-
-        <View style={styles.navigationButtons}>
-          {activeSection === 'work' && (
-            <TouchableOpacity
-              style={[styles.button, styles.backButtonStyle]}
-              onPress={() => setActiveSection('personal')}
-            >
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-          )}
-         
+        <View style={styles.headerContainer}>
           <TouchableOpacity
-            style={[styles.button, styles.nextButton, loading && styles.buttonDisabled]}
-            onPress={() => {
-              if (activeSection === 'personal') {
-                if (validatePersonalInfo()) setActiveSection('work');
-              } else {
-                handleSubmit();
-              }
-            }}
-            disabled={loading}
+            style={styles.backButtonHeader}
+            onPress={() => navigation.goBack()}
           >
-            <Text style={styles.nextButtonText}>
-              {loading ? 'Processing...' : activeSection === 'personal' ? 'Next' : 'Submit'}
-            </Text>
+            <Text style={styles.backText}>◂</Text>
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Create Admin Account</Text>
         </View>
-      </ScrollView>
+
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag" // ✅ helps hide keyboard when scrolling
+        >
+          {activeSection === "personal"
+            ? renderPersonalSection()
+            : renderWorkSection()}
+
+          <View style={styles.navigationButtons}>
+            {activeSection === "work" && (
+              <TouchableOpacity
+                style={[styles.button, styles.backButtonStyle]}
+                onPress={() => setActiveSection("personal")}
+              >
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.button,
+                styles.nextButton,
+                loading && styles.buttonDisabled,
+              ]}
+              onPress={() => {
+                if (activeSection === "personal") {
+                  if (validatePersonalInfo()) setActiveSection("work");
+                } else {
+                  handleSubmit();
+                }
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.nextButtonText}>
+                {loading
+                  ? "Processing..."
+                  : activeSection === "personal"
+                  ? "Next"
+                  : "Submit"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: "#FFFFFF",
   },
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0'
+    borderBottomColor: "#E0E0E0",
   },
   backButtonHeader: {
-    marginRight: 10
+    marginRight: 10,
   },
   backText: {
     fontSize: 24,
-    color: '#000'
+    color: "#000",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#000'
+    fontWeight: "600",
+    color: "#000",
   },
   scrollView: {
-    flex: 1
+    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 20
+    paddingVertical: 20,
   },
   spacer: {
-    height: 100
+    height: 100,
   },
   formSection: {
-    marginTop: 10
+    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 15,
-    color: '#333'
+    color: "#333",
   },
-  // NEW: label above each input
   fieldLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 6
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: "#E0E0E0",
     borderRadius: 8,
     paddingHorizontal: 15,
     paddingVertical: 12,
     marginBottom: 15,
     fontSize: 14,
-    color: '#000'
+    color: "#000",
   },
   departmentContainer: {
-    marginBottom: 15
+    marginBottom: 15,
   },
   departmentLabel: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
     marginBottom: 8,
-    fontWeight: '500'
+    fontWeight: "500",
   },
   departmentValue: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: "#E0E0E0",
     borderRadius: 8,
     paddingHorizontal: 15,
     paddingVertical: 12,
-    backgroundColor: '#F9F9F9'
+    backgroundColor: "#F9F9F9",
   },
   departmentText: {
     fontSize: 14,
-    color: '#333',
-    fontWeight: '500'
+    color: "#333",
+    fontWeight: "500",
   },
   dropdownInput: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: "#E0E0E0",
     borderRadius: 8,
     paddingHorizontal: 15,
     paddingVertical: 12,
     marginBottom: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   dropdownText: {
     fontSize: 14,
-    color: '#000'
+    color: "#000",
   },
   placeholderText: {
-    color: '#999'
+    color: "#999",
   },
   dropdownIcon: {
     fontSize: 12,
-    color: '#666'
+    color: "#666",
   },
   datePickerInput: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: "#E0E0E0",
     borderRadius: 8,
     paddingHorizontal: 15,
     paddingVertical: 12,
     marginBottom: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   datePickerText: {
     fontSize: 14,
-    color: '#000'
+    color: "#000",
   },
   datePickerIcon: {
-    fontSize: 18
+    fontSize: 18,
   },
   iosBirthdayPickerButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "flex-end",
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    marginBottom: 15
+    borderTopColor: "#E0E0E0",
+    marginBottom: 15,
   },
   iosBirthdayButton: {
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 8,
-    backgroundColor: '#4CAF50'
+    backgroundColor: "#4CAF50",
   },
   iosBirthdayButtonText: {
-    color: '#FFF',
-    fontWeight: '600',
-    fontSize: 14
+    color: "#FFF",
+    fontWeight: "600",
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end'
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: '#FFF',
+    backgroundColor: "#FFF",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 20
+    maxHeight: "80%",
+    paddingBottom: 20,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0'
+    borderBottomColor: "#E0E0E0",
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#000'
+    fontWeight: "600",
+    color: "#000",
   },
   closeButton: {
     fontSize: 24,
-    color: '#666'
+    color: "#666",
   },
   positionItem: {
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    borderBottomColor: "#F0F0F0",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   positionItemSelected: {
-    backgroundColor: '#E8F5E9'
+    backgroundColor: "#E8F5E9",
   },
   positionItemText: {
     fontSize: 14,
-    color: '#333'
+    color: "#333",
   },
   positionItemTextSelected: {
-    color: '#4CAF50',
-    fontWeight: '600'
+    color: "#4CAF50",
+    fontWeight: "600",
   },
   checkmark: {
     fontSize: 18,
-    color: '#4CAF50',
-    fontWeight: 'bold'
+    color: "#4CAF50",
+    fontWeight: "bold",
   },
   navigationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 20,
     gap: 10,
-    marginBottom: 20
+    marginBottom: 20,
   },
   button: {
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
   },
   backButtonStyle: {
-    backgroundColor: '#F0F0F0'
+    backgroundColor: "#F0F0F0",
   },
   nextButton: {
-    backgroundColor: '#4CAF50'
+    backgroundColor: "#4CAF50",
   },
   buttonDisabled: {
-    opacity: 0.6
+    opacity: 0.6,
   },
   backButtonText: {
-    color: '#000',
-    fontWeight: '500'
+    color: "#000",
+    fontWeight: "500",
   },
   nextButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '500'
-  }
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+
+  // ✅ NEW styles for password show/hide
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 0,
+    paddingHorizontal: 10,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingRight: 10,
+    fontSize: 14,
+    color: "#000",
+  },
+  toggleText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#4CAF50",
+  },
 });
-
-
-

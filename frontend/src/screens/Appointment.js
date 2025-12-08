@@ -82,7 +82,6 @@ export default function AppointmentScreen({ navigation }) {
                 email: currentUser.email || ''
               });
               
-              // Optionally, show an alert or prompt to complete profile
               Alert.alert(
                 'Profile Incomplete', 
                 'Please complete your profile in the profile section.'
@@ -103,7 +102,6 @@ export default function AppointmentScreen({ navigation }) {
               id: doc.id,
               ...doc.data()
             }))
-            // Sort by creation date, newest first
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           
           setPendingAppointments(appointments);
@@ -125,7 +123,7 @@ export default function AppointmentScreen({ navigation }) {
 
   const handleScheduleAppointment = async () => {
     try {
-      // Validate inputs
+      // Basic profile validation
       if (!userData.firstName || !userData.lastName || !userData.plateNumber) {
         Alert.alert('Incomplete Profile', 'Please complete your profile first');
         return;
@@ -144,6 +142,32 @@ export default function AppointmentScreen({ navigation }) {
         selectedTime.getHours(),
         selectedTime.getMinutes()
       );
+
+      // ✅ Validate day: Monday–Friday only (0=Sun, 6=Sat)
+      const day = appointmentDateTime.getDay();
+      if (day === 0 || day === 6) {
+        Alert.alert(
+          'Unavailable Day',
+          'Appointments can only be scheduled from Monday to Friday. Please choose a weekday.'
+        );
+        return;
+      }
+
+      // ✅ Validate time: 8:00 AM – 5:00 PM only
+      const hours = appointmentDateTime.getHours();
+      const minutes = appointmentDateTime.getMinutes();
+      const totalMinutes = hours * 60 + minutes;
+
+      const startMinutes = 8 * 60;   // 8:00 AM
+      const endMinutes = 17 * 60;    // 5:00 PM
+
+      if (totalMinutes < startMinutes || totalMinutes > endMinutes) {
+        Alert.alert(
+          'Unavailable Time',
+          'Appointments are only available between 8:00 AM and 5:00 PM. Please select a time within office hours.'
+        );
+        return;
+      }
 
       // Check for existing pending appointments
       const appointmentsQuery = query(
@@ -172,17 +196,20 @@ export default function AppointmentScreen({ navigation }) {
         createdAt: new Date().toISOString()
       });
 
-      // Refresh appointments
-      setPendingAppointments([{
-        id: newAppointmentRef.id,
-        uid: auth.currentUser.uid,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        plateNumber: userData.plateNumber,
-        appointmentDate: appointmentDateTime.toISOString(),
-        status: 'Pending',
-        createdAt: new Date().toISOString()
-      }, ...pendingAppointments]);
+      // Refresh list
+      setPendingAppointments([
+        {
+          id: newAppointmentRef.id,
+          uid: auth.currentUser.uid,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          plateNumber: userData.plateNumber,
+          appointmentDate: appointmentDateTime.toISOString(),
+          status: 'Pending',
+          createdAt: new Date().toISOString()
+        },
+        ...pendingAppointments
+      ]);
 
       Alert.alert(
         'Appointment Scheduled', 
@@ -196,10 +223,8 @@ export default function AppointmentScreen({ navigation }) {
 
   const handleCancelAppointment = async (appointmentId) => {
     try {
-      // Delete the appointment from Firestore
       await deleteDoc(doc(db, "appointments", appointmentId));
 
-      // Update local state
       setPendingAppointments(
         pendingAppointments.filter(appt => appt.id !== appointmentId)
       );
@@ -214,7 +239,6 @@ export default function AppointmentScreen({ navigation }) {
   const renderPendingAppointment = ({ item }) => {
     const appointmentDate = new Date(item.appointmentDate);
     
-    // Determine styles based on appointment status
     const containerStyle = 
       item.status === 'Approved' 
         ? [styles.appointmentItem, styles.approvedAppointmentItem]
@@ -282,6 +306,7 @@ export default function AppointmentScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header same style as Me.js */}
       <View style={styles.header}>
         <TouchableOpacity 
           onPress={() => navigation.goBack()}
@@ -301,15 +326,17 @@ export default function AppointmentScreen({ navigation }) {
               <View style={styles.userInfoRow}>
                 <Text style={styles.labelText}>Name:</Text>
                 <Text style={styles.valueText}>
-                  {userData.firstName && userData.lastName 
-                    ? `${userData.firstName} ${userData.lastName}` 
-                    : 'Not completed'}
+                  {userData.firstName || userData.lastName
+                    ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
+                    : (userData.email || 'Not set – please update your profile')}
                 </Text>
               </View>
               <View style={styles.userInfoRow}>
                 <Text style={styles.labelText}>E-Bike Plate Number:</Text>
                 <Text style={styles.valueText}>
-                  {userData.plateNumber || 'Not Set'}
+                  {userData.plateNumber && userData.plateNumber !== 'Not Set'
+                    ? userData.plateNumber
+                    : 'Not set – you can still schedule an appointment.'}
                 </Text>
               </View>
             </View>
@@ -342,7 +369,6 @@ export default function AppointmentScreen({ navigation }) {
                 />
               )}
 
-              {/* Time Picker Similar to Date Picker */}
               <TouchableOpacity 
                 style={styles.pickerButton}
                 onPress={() => setShowTimePicker(true)}
@@ -399,20 +425,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'white'
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#2e7d32',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    height: 60
+    height: 72,
+    backgroundColor: "#2e7d32",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    position: "relative",
   },
   backButton: {
-    marginRight: 15
+    position: "absolute",
+    left: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   backText: {
-    fontSize: 18,
-    color: 'white'
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500",
   },
   headerTitle: {
     fontSize: 20,
@@ -445,7 +475,9 @@ const styles = StyleSheet.create({
     color: '#333'
   },
   valueText: {
-    color: '#666'
+    color: '#666',
+    flex: 1,
+    flexWrap: 'wrap'
   },
   appointmentContainer: {
     backgroundColor: '#f0f0f0',
@@ -489,14 +521,13 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 10
   },
-  // New styles for different appointment statuses
   approvedAppointmentItem: {
-    backgroundColor: '#e8f5e9',  // Light green
+    backgroundColor: '#e8f5e9',
     borderColor: '#2e7d32',
     borderWidth: 1
   },
   rejectedAppointmentItem: {
-    backgroundColor: '#ffebee',  // Light red
+    backgroundColor: '#ffebee',
     borderColor: '#d32f2f',
     borderWidth: 1
   },
@@ -504,16 +535,19 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10
   },
+  appointmentName: {
+    color: '#333',
+    fontWeight: 'bold'
+  },
   appointmentText: {
     color: '#333',
     fontWeight: 'bold'
   },
-  // Status-specific text styles
   approvedAppointmentText: {
-    color: '#2e7d32'  // Green text for approved
+    color: '#2e7d32'
   },
   rejectedAppointmentText: {
-    color: '#d32f2f'  // Red text for rejected
+    color: '#d32f2f'
   },
   appointmentStatus: {
     marginTop: 5
@@ -527,7 +561,6 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 5
   },
-  // New styles for hidden cancel button
   hiddenCancelButton: {
     display: 'none'
   },
@@ -542,4 +575,4 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center'
   }
-});  
+});
