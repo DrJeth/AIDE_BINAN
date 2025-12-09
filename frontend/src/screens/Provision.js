@@ -10,15 +10,18 @@ import {
   Dimensions,
 } from "react-native";
 
+
 const { width: WINDOW_W } = Dimensions.get("window");
 const CARD_W = Math.min(330, WINDOW_W - 56);
 const GREEN = "#2e7d32";
+
 
 export default function Provision({ navigation }) {
   const handleBack = () => {
     if (navigation?.goBack) navigation.goBack();
     else if (navigation?.navigate) navigation.navigate("Ordinance");
   };
+
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -27,13 +30,15 @@ export default function Provision({ navigation }) {
         <Pressable
           onPress={handleBack}
           style={styles.backCircle}
-          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+          android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
         >
           <Text style={styles.backIcon}>‹</Text>
         </Pressable>
 
+
         <Text style={styles.headerTitle}>Administrative Provision</Text>
       </View>
+
 
       {/* ===================== CONTENT ===================== */}
       <ScrollView
@@ -41,7 +46,6 @@ export default function Provision({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-
           <Text style={styles.paragraph}>
             <Text style={styles.letter}>a. </Text>
             <Text style={styles.bodyText}>
@@ -49,6 +53,7 @@ export default function Provision({ navigation }) {
               Franchising and Regulatory Board (BTFRB) to be paid at cost by the owner.
             </Text>
           </Text>
+
 
           <Text style={styles.paragraph}>
             <Text style={styles.letter}>b. </Text>
@@ -59,6 +64,7 @@ export default function Provision({ navigation }) {
               of the plate or sticker issued.
             </Text>
           </Text>
+
 
           <Text style={styles.paragraph}>
             <Text style={styles.letter}>c. </Text>
@@ -71,6 +77,7 @@ export default function Provision({ navigation }) {
             </Text>
           </Text>
 
+
           <Text style={styles.paragraph}>
             <Text style={styles.letter}>d. </Text>
             <Text style={styles.bodyText}>
@@ -79,6 +86,7 @@ export default function Provision({ navigation }) {
               adherence to the maximum speed levels.
             </Text>
           </Text>
+
 
           <Text style={styles.paragraph}>
             <Text style={styles.letter}>e. </Text>
@@ -89,6 +97,7 @@ export default function Provision({ navigation }) {
             </Text>
           </Text>
 
+
           <Text style={[styles.paragraph, styles.lastParagraph]}>
             <Text style={styles.letter}>f. </Text>
             <Text style={styles.bodyText}>
@@ -98,10 +107,12 @@ export default function Provision({ navigation }) {
             </Text>
           </Text>
 
+
           <Text style={styles.footerNote}>
             City Ordinance No. 21-(2023) dated September 4, 2023
           </Text>
         </View>
+
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -109,12 +120,14 @@ export default function Provision({ navigation }) {
   );
 }
 
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#f4f4f4",
     alignItems: "center",
   },
+
 
   headerGreen: {
     position: "absolute",
@@ -131,24 +144,29 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
+
+  // 🔙 updated back button style (only this changed)
   backCircle: {
     position: "absolute",
     left: 16,
     top: 35,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#fff",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-    elevation: 5,
   },
 
+
   backIcon: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: GREEN,
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#ffffff",
   },
+
 
   headerTitle: {
     marginTop: 8,
@@ -157,12 +175,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+
   scrollArea: {
     paddingTop: 130,
     alignItems: "center",
     paddingHorizontal: 16,
     paddingBottom: 30,
   },
+
 
   card: {
     backgroundColor: "#ffffff",
@@ -176,20 +196,24 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
 
+
   paragraph: {
     marginBottom: 12,
     flexDirection: "row",
     flexWrap: "wrap",
   },
 
+
   lastParagraph: {
     marginBottom: 0,
   },
+
 
   letter: {
     fontWeight: "700",
     fontSize: 15,
   },
+
 
   bodyText: {
     fontSize: 14,
@@ -198,10 +222,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
+
   footerNote: {
     marginTop: 18,
     fontSize: 11,
     color: "#333",
   },
 });
+
+
 
