@@ -781,7 +781,7 @@ const RiderScreen = ({ navigation }) => {
                           ? EBIKE_CATEGORIES.find(c => c.value === selectedCategory)?.label 
                           : 'Select E-Bike Category'}
                       </Text>
-                      <Feather name="chevron-down" size={20} color="#2D8E5F" />
+                      <Feather name="chevron-down" size={20} color="#2E7D32" />
                     </TouchableOpacity>
                   </View>
 
@@ -802,7 +802,7 @@ const RiderScreen = ({ navigation }) => {
                       onPress={() => setShowRegisteredPicker(true)}
                       disabled={uploading}
                     >
-                      <Feather name="calendar" size={20} color="#2D8E5F" />
+                      <Feather name="calendar" size={20} color="#2E7D32" />
                       <Text style={styles.dateButtonText}>
                         {registeredDateInput ? new Date(registeredDateInput).toLocaleDateString() : 'Select Registered Date'}
                       </Text>
@@ -838,7 +838,7 @@ const RiderScreen = ({ navigation }) => {
                       onPress={() => setShowRenewalPicker(true)}
                       disabled={uploading}
                     >
-                      <Feather name="calendar" size={20} color="#2D8E5F" />
+                      <Feather name="calendar" size={20} color="#2E7D32" />
                       <Text style={styles.dateButtonText}>
                         {renewalDateInput ? new Date(renewalDateInput).toLocaleDateString() : 'Select Renewal Date'}
                       </Text>
@@ -877,7 +877,7 @@ const RiderScreen = ({ navigation }) => {
                       }}
                       disabled={uploading}
                     >
-                      <Feather name="upload" size={24} color={uploading ? '#999' : '#2D8E5F'} />
+                      <Feather name="upload" size={24} color={uploading ? '#999' : '#2E7D32'} />
                       <Text style={[styles.uploadButtonText, uploading && styles.uploadButtonTextDisabled]}>
                         {uploading ? 'Uploading...' : 'Upload Verification Docs'}
                       </Text>
@@ -1047,7 +1047,7 @@ const RiderScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.searchContainer}>
-        <Feather name="search" size={20} color="#2D8E5F" />
+        <Feather name="search" size={20} color="#2E7D32" />
         <TextInput 
           placeholder="Search name or plate number" 
           style={styles.searchInput}
@@ -1084,7 +1084,7 @@ const RiderScreen = ({ navigation }) => {
                 onPress={() => showRiderDetails(item)}
                 style={styles.actionButton}
               >
-                <Feather name="info" size={20} color="#2D8E5F" />
+                <Feather name="info" size={20} color="#2E7D32" />
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -1115,8 +1115,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15 * RESPONSIVE.width,
     paddingVertical: 10 * RESPONSIVE.height,
     borderBottomWidth: 1,
-    borderBottomColor: '#2D8E5F',
-    backgroundColor: '#2D8E5F'
+    borderBottomColor: '#2E7D32',
+    backgroundColor: '#2E7D32'
   },
   backButton: {
     flexDirection: 'row',
@@ -1154,14 +1154,14 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent'
   },
   activeTab: {
-    borderBottomColor: '#2D8E5F'
+    borderBottomColor: '#2E7D32'
   },
   tabText: {
     color: '#7F8C8D',
     fontWeight: '600'
   },
   activeTabText: {
-    color: '#2D8E5F'
+    color: '#2E7D32'
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1373,7 +1373,7 @@ const styles = StyleSheet.create({
   },
   uploadButtonText: {
     marginLeft: 10,
-    color: '#2D8E5F',
+    color: '#2E7D32',
     fontWeight: '600'
   },
   uploadButtonTextDisabled: {
@@ -1417,7 +1417,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   datePickerDoneButton: {
-    backgroundColor: '#2D8E5F',
+    backgroundColor: '#2E7D32',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
