@@ -10,53 +10,67 @@ import {
   Pressable,
 } from "react-native";
 
+
 const { width: WINDOW_W } = Dimensions.get("window");
 const CARD_W = Math.min(320, WINDOW_W - 48);
+
 
 export default function Penalty({ navigation }) {
   const body = `
 Any person found riding an unregistered E-Bike or E-Scooters shall be punished with the following fines:
 
+
 a. First Offense
 Five Hundred Pesos (P500.00)
+
 
 b. Second Offense
 One Thousand Pesos (P1,000.00)
 
+
 c. Third Offense
 Two Thousand Pesos (P2,000.00) *
+
 
 d. Fourth / Subsequent Offenses:
 Confiscation of License / Impoundment of Unit
 
+
 For unregistered e-vehicle units driven by riders with no license, the penalty shall be based on the City of Biñan’s Traffic Code with an Impoundable Procedure.
+
 
 For those who failed to install an authorized metal plate/sticker, a penalty of Five Hundred Pesos (P500.00) shall be imposed.
 
+
 Non-residents of the City of Biñan who shall pass the city's road and will frequently visit due to unavoidable circumstances (only mode of transportation) such as but not limited to: school and work service, use for livelihood and purchase of basic needs (food, medicine and other necessities) shall also be required to register their e-vehicle to BTFRB.
+
 
 Penalty for Distributor / Marketing who failed to comply hereto:
   `.trim();
+
 
   const handleBack = () => {
     if (navigation?.goBack) navigation.goBack();
     else if (navigation?.navigate) navigation.navigate("Ordinance");
   };
 
+
   return (
     <SafeAreaView style={styles.screen}>
-      {/* SAME HEADER AS DEFINITION2 */}
+      {/* SAME HEADER AS DEFINITION2 (with updated back button style) */}
       <View style={styles.headerGreen}>
         <Pressable
           onPress={handleBack}
           style={styles.backCircle}
-          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+          android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
         >
           <Text style={styles.backIcon}>‹</Text>
         </Pressable>
 
+
         <Text style={styles.headerTitle}>Penalty</Text>
       </View>
+
 
       <ScrollView
         contentContainerStyle={styles.scrollArea}
@@ -64,6 +78,7 @@ Penalty for Distributor / Marketing who failed to comply hereto:
       >
         <View style={[styles.card, { width: CARD_W }]}>
           {/* REMOVED green circle accent */}
+
 
           <Text style={styles.bodyText}>
             {body.split("\n\n").map((para, idx) => (
@@ -74,10 +89,12 @@ Penalty for Distributor / Marketing who failed to comply hereto:
             ))}
           </Text>
 
+
           <Text style={styles.footer}>
             City Ordinance No. 21-(2023) dated September 4, 2023
           </Text>
         </View>
+
 
         <View style={{ height: 56 }} />
       </ScrollView>
@@ -85,7 +102,9 @@ Penalty for Distributor / Marketing who failed to comply hereto:
   );
 }
 
+
 const GREEN = "#2e7d32";
+
 
 const styles = StyleSheet.create({
   screen: {
@@ -93,6 +112,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f4f4",
     alignItems: "center",
   },
+
 
   /* SAME HEADER AS DEFINITION2 */
   headerGreen: {
@@ -110,24 +130,29 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
+
+  // 🔙 updated back button style (same as other screens)
   backCircle: {
     position: "absolute",
     left: 16,
     top: 35,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#fff",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-    elevation: 5,
   },
 
+
   backIcon: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: GREEN,
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#ffffff",
   },
+
 
   headerTitle: {
     marginTop: 8,
@@ -136,12 +161,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+
   scrollArea: {
     paddingTop: 130,
     alignItems: "center",
     paddingHorizontal: 12,
     paddingBottom: 24,
   },
+
 
   card: {
     backgroundColor: "#f0f0f0",
@@ -157,10 +184,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
 
+
   bodyText: {
     width: "100%",
     color: "#111",
   },
+
 
   paragraph: {
     fontFamily: "CrimsonText-Regular",
@@ -169,6 +198,7 @@ const styles = StyleSheet.create({
     color: "#111",
   },
 
+
   footer: {
     marginTop: 8,
     fontFamily: "CrimsonText-Regular",
@@ -176,3 +206,6 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 });
+
+
+
