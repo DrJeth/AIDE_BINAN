@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,16 +16,15 @@ import {
   FlatList
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  addDoc,
-  serverTimestamp
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../config/firebaseConfig';
-
 
 // Design-matched color palette from HomeAdmin
 const COLORS = {
@@ -35,10 +36,8 @@ const COLORS = {
   BOTTOM_BAR_GREEN: '#2E7D32'  // Bottom bar green
 };
 
-
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BOTTOM_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 68;
-
 
 export default function NewsScreen({ navigation }) {
   const [announcements, setAnnouncements] = useState([]);
@@ -49,11 +48,10 @@ export default function NewsScreen({ navigation }) {
     type: 'E-bike update'
   });
 
-
   useEffect(() => {
     const announcementsRef = collection(db, 'announcements');
     const q = query(announcementsRef, orderBy('createdAt', 'desc'));
-   
+    
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const announcementsList = querySnapshot.docs.map(doc => ({
         id: doc.id,
@@ -62,17 +60,14 @@ export default function NewsScreen({ navigation }) {
       setAnnouncements(announcementsList);
     });
 
-
     return () => unsubscribe();
   }, []);
-
 
   const handleCreateAnnouncement = async () => {
     if (!newAnnouncement.title.trim()) {
       Alert.alert('Error', 'Please enter an announcement title');
       return;
     }
-
 
     try {
       const announcementsRef = collection(db, 'announcements');
@@ -81,7 +76,6 @@ export default function NewsScreen({ navigation }) {
         createdAt: serverTimestamp()
       });
 
-
       setNewAnnouncement({ title: '', description: '', type: 'E-bike update' });
       setModalVisible(false);
     } catch (error) {
@@ -89,7 +83,6 @@ export default function NewsScreen({ navigation }) {
       Alert.alert('Error', 'Could not create announcement');
     }
   };
-
 
   const renderAnnouncementItem = ({ item }) => (
     <TouchableOpacity style={styles.announcementCard}>
@@ -105,21 +98,33 @@ export default function NewsScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView
+        <ScrollView 
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
+          {/* Header: white background, ◀ Back on left, News centered, + on right */}
           <View style={styles.headerContainer}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()} 
+              style={styles.headerIconLeft}
+            >
+              <Text style={styles.backArrow}>◀</Text>
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+
             <Text style={styles.greeting}>News</Text>
-            <TouchableOpacity onPress={() => setModalVisible(true)}>
+
+            <TouchableOpacity 
+              onPress={() => setModalVisible(true)}
+              style={styles.headerIconRight}
+            >
               <Feather name="plus-circle" size={24} color={COLORS.ICON_GREEN} />
             </TouchableOpacity>
           </View>
-   
+    
           {announcements.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No announcements yet</Text>
@@ -134,7 +139,6 @@ export default function NewsScreen({ navigation }) {
           )}
         </ScrollView>
       </SafeAreaView>
-
 
       {/* Modal for Creating Announcement */}
       <Modal
@@ -199,48 +203,44 @@ export default function NewsScreen({ navigation }) {
         </View>
       </Modal>
 
-
       {/* Bottom Navigation */}
       <View style={[styles.bottomBar, { height: BOTTOM_BAR_HEIGHT }]}>
         <SafeAreaView style={styles.bottomSafe}>
           <View style={[styles.bottomInner, { height: BOTTOM_BAR_HEIGHT }]}>
-            <TouchableOpacity
-              style={styles.bottomBarItem}
+            <TouchableOpacity 
+              style={styles.bottomBarItem} 
               onPress={() => navigation.navigate("HomeAdmin")}
             >
               <Feather name="home" size={24} color="white" />
               <Text style={styles.bottomBarText}>Home</Text>
             </TouchableOpacity>
 
-
-            <TouchableOpacity
-              style={styles.bottomBarItem}
+            <TouchableOpacity 
+              style={styles.bottomBarItem} 
               onPress={() => navigation.navigate("NewsScreen")}
             >
               <Feather name="file-text" size={24} color="white" />
               <Text style={styles.bottomBarText}>News</Text>
             </TouchableOpacity>
  
-            <TouchableOpacity
-              style={styles.bottomBarItem}
+            <TouchableOpacity 
+              style={styles.bottomBarItem} 
               onPress={() => navigation.navigate("RiderScreen")}
             >
               <Feather name="users" size={24} color="white" />
               <Text style={styles.bottomBarText}>Rider</Text>
             </TouchableOpacity>
 
-
-            <TouchableOpacity
-              style={styles.bottomBarItem}
+            <TouchableOpacity 
+              style={styles.bottomBarItem} 
               onPress={() => navigation.navigate("AdminAppointment")}
             >
               <Feather name="calendar" size={24} color="white" />
               <Text style={styles.bottomBarText}>Appointment</Text>
             </TouchableOpacity>
 
-
-            <TouchableOpacity
-              style={styles.bottomBarItem}
+            <TouchableOpacity 
+              style={styles.bottomBarItem} 
               onPress={() => navigation.navigate("Me")}
             >
               <Feather name="user" size={24} color="white" />
@@ -253,7 +253,6 @@ export default function NewsScreen({ navigation }) {
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -265,17 +264,45 @@ const styles = StyleSheet.create({
   content: {
     padding: 20
   },
+
+  /* HEADER (no green background) */
   headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    position: 'relative',
     alignItems: 'center',
-    marginBottom: 20
+    justifyContent: 'center',
+    marginBottom: 20,
+    minHeight: 44,
+  },
+  headerIconLeft: {
+    position: 'absolute',
+    left: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: '100%',
+  },
+  headerIconRight: {
+    position: 'absolute',
+    right: 0,
+    justifyContent: 'center',
+    height: '100%',
+  },
+  backArrow: {
+    fontSize: 18,
+    color: COLORS.TEXT_DARK,
+    marginRight: 4,
+  },
+  backText: {
+    fontSize: 16,
+    color: COLORS.TEXT_DARK,
+    fontWeight: '600',
   },
   greeting: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '700',
-    color: COLORS.TEXT_DARK
+    color: COLORS.TEXT_DARK,
+    textAlign: 'center',
   },
+
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -420,6 +447,5 @@ const styles = StyleSheet.create({
     marginTop: 5
   }
 });
-
 
 
