@@ -46,14 +46,17 @@ City Ordinance No. 21-(2023) dated September 4, 2023
 
   return (
     <SafeAreaView style={styles.screen}>
-      {/* ================= HEADER (same as Definition2 & 3) ================= */}
+      {/* ================= HEADER ================= */}
       <View style={styles.headerGreen}>
+        {/* Back button – same style as Purpose.js */}
         <Pressable
           onPress={handleBack}
-          style={styles.backCircle}
-          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+          style={({ pressed }) => [styles.backWrap, pressed && styles.backPressed]}
+          android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
         >
-          <Text style={styles.backIcon}>‹</Text>
+          <View style={styles.backCircle}>
+            <Text style={styles.backIcon}>‹</Text>
+          </View>
         </Pressable>
 
         <Text style={styles.headerTitle}>Definition of Terms</Text>
@@ -65,8 +68,6 @@ City Ordinance No. 21-(2023) dated September 4, 2023
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-          {/* removed green accent shape */}
-
           <Text style={styles.body}>
             {bodyText.split("\n\n").map((p, i) => (
               <Text
@@ -116,23 +117,30 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  backCircle: {
+  // 🔙 back button only (matching Purpose.js style)
+  backWrap: {
     position: "absolute",
     left: 16,
-    top: 35,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#ffffff",
+    top: 35, // keep same vertical placement as your original
+    zIndex: 20,
+  },
+  backPressed: {
+    opacity: 0.85,
+  },
+  backCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-    elevation: 5,
   },
-
   backIcon: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#2e7d32",
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
   },
 
   headerTitle: {
@@ -192,3 +200,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+	
