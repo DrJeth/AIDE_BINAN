@@ -80,7 +80,7 @@ const RiderScreen = ({ navigation }) => {
   const [showRegisteredPicker, setShowRegisteredPicker] = useState(false);
   const [showRenewalPicker, setShowRenewalPicker] = useState(false);
 
-  // NEW: manual plate number input (for riders with no plate)
+  // manual plate number input (for riders with no plate)
   const [manualPlateNumber, setManualPlateNumber] = useState('');
   const [manualPlateError, setManualPlateError] = useState('');
 
@@ -382,7 +382,7 @@ const RiderScreen = ({ navigation }) => {
         return;
       }
 
-      // 🔴 Plate number validation logic
+      // Plate number validation logic
       let finalPlateNumber = selectedRider.ebikeInfo?.plateNumber || '';
 
       if (!finalPlateNumber) {
@@ -439,7 +439,7 @@ const RiderScreen = ({ navigation }) => {
           registeredDate: new Date(registeredDateInput),
           renewalDate: new Date(renewalDateInput),
           registrationStatus: 'Active',
-          plateNumber: finalPlateNumber, // 🔵 save plate number
+          plateNumber: finalPlateNumber,
           paymentDetails: {
             amount: parseFloat(paymentAmount),
             verifiedBy: auth.currentUser.uid,
@@ -447,7 +447,6 @@ const RiderScreen = ({ navigation }) => {
           }
         };
 
-        // Add admin verification images if any
         if (verificationImageUrls && verificationImageUrls.length > 0) {
           updateData.adminVerificationImages = verificationImageUrls;
         }
@@ -496,10 +495,6 @@ const RiderScreen = ({ navigation }) => {
         return;
       }
 
-      // NOTE: Plate validation is handled inside completeVerification
-      // including check if manualPlateNumber is required.
-
-      // If no images selected, ask for confirmation
       if (adminUploadImages.length === 0) {
         Alert.alert(
           'No Documents',
@@ -512,10 +507,8 @@ const RiderScreen = ({ navigation }) => {
         return;
       }
 
-      // Images were selected, upload them
       const verificationImageUrls = await uploadAdminImagesToFirebase();
 
-      // If upload fails, ask user if they want to continue without images
       if (verificationImageUrls.length === 0) {
         Alert.alert(
           'Upload Warning',
@@ -584,7 +577,6 @@ const RiderScreen = ({ navigation }) => {
     setSelectedCategory(rider.ebikeCategorySelected || '');
     setRegisteredDateInput('');
     setRenewalDateInput('');
-    // NEW: set manual plate based on rider data
     setManualPlateNumber(rider.ebikeInfo?.plateNumber || '');
     setManualPlateError('');
     setDetailModalVisible(true);
@@ -621,7 +613,6 @@ const RiderScreen = ({ navigation }) => {
                  activeTab === 'Verified' ? 'Verified Rider Details' : 'Rejected Rider Details'}
               </Text>
 
-              {/* Registration Status Badge */}
               {activeTab === 'Verified' && getRegistrationStatus(selectedRider) && (
                 <View style={[styles.statusBadge, { backgroundColor: getRegistrationStatus(selectedRider).color + '20', borderColor: getRegistrationStatus(selectedRider).color }]}>
                   <Text style={[styles.statusText, { color: getRegistrationStatus(selectedRider).color }]}>
@@ -686,7 +677,6 @@ const RiderScreen = ({ navigation }) => {
                   </Text>
                 </View>
 
-                {/* Plate Number: show existing OR input if none */}
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Plate Number:</Text>
                   {selectedRider.ebikeInfo?.plateNumber ? (
@@ -1026,6 +1016,13 @@ const RiderScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backArrow}>◂</Text>
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Riders Management</Text>
       </View>
 
@@ -1113,15 +1110,36 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 50 : 20
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 15 * RESPONSIVE.width,
-    paddingBottom: 15 * RESPONSIVE.height,
+    paddingVertical: 10 * RESPONSIVE.height,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0'
+    borderBottomColor: '#2D8E5F',
+    backgroundColor: '#2D8E5F'
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 10 * RESPONSIVE.width
+  },
+  backArrow: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginRight: 4
+  },
+  backText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600'
   },
   headerTitle: {
-    fontSize: 24 * RESPONSIVE.width,
+    fontSize: 20 * RESPONSIVE.width,
     fontWeight: '700',
-    color: '#2C3E50'
+    color: '#FFFFFF'
   },
   tabContainer: {
     flexDirection: 'row',
