@@ -17,7 +17,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 
 const BACKEND_BASE = 'https://web-production-868ee.up.railway.app';
-const GOOGLE_MAPS_API_KEY = 'AIzaSyA6NOYNehpIXFNVrLoPLloZ6fcajBb9kns'; // <- replace with your real key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyA6NOYNehpIXFNVrLoPLloZ6fcajBb9kns'; 
 
 export default function GreenRoute({ navigation }) {
   const [pointA, setPointA] = useState('');

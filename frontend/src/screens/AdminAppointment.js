@@ -26,6 +26,10 @@ export default function AdminAppointment({ navigation }) {
   const [pendingAppointments, setPendingAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ✅ NEW: para perfect center ang title kahit may Back button
+  const DEFAULT_HEADER_SIDE_W = 90;
+  const [headerLeftW, setHeaderLeftW] = useState(DEFAULT_HEADER_SIDE_W);
+
   const db = getFirestore();
   const auth = getAuth();
 
@@ -51,7 +55,6 @@ export default function AdminAppointment({ navigation }) {
     } catch (error) {
       console.error("Error fetching appointments:", error);
       
-      // Detailed error handling
       const errorMessage = error.message || "Unknown error";
       const indexCreationLink = error.code === 'permission-denied' 
         ? "https://console.firebase.google.com/project/YOUR_PROJECT_ID/firestore/indexes"
@@ -95,7 +98,6 @@ export default function AdminAppointment({ navigation }) {
         updatedAt: new Date().toISOString()
       });
 
-      // Update local state - change status instead of filtering out
       setPendingAppointments(currentAppointments => 
         currentAppointments.map(appt => 
           appt.id === appointmentId 
@@ -117,7 +119,6 @@ export default function AdminAppointment({ navigation }) {
   const renderAppointmentItem = ({ item }) => {
     const appointmentDate = new Date(item.appointmentDate);
     
-    // Determine styles based on appointment status
     const containerStyle = 
       item.status === 'Approved' 
         ? [styles.appointmentItem, styles.approvedAppointmentItem]
@@ -174,111 +175,173 @@ export default function AdminAppointment({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backText}>◂ Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Appointments</Text>
-      </View>
-
-      <FlatList
-        data={pendingAppointments}
-        renderItem={renderAppointmentItem}
-        keyExtractor={(item) => item.id}
-        ListEmptyComponent={
-          <Text style={styles.noAppointmentsText}>
-            {loading ? 'Loading...' : 'No pending appointments'}
-          </Text>
-        }
-        contentContainerStyle={styles.content}
-        refreshing={loading}
-        onRefresh={() => {
-          // Refresh appointments
-          setLoading(true);
-          fetchPendingAppointments();
-        }}
-      />
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomBar}>
-        <SafeAreaView style={styles.bottomSafe}>
-          <View style={styles.bottomInner}>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        
+        {/* ✅ HEADER (centered title + aligned to back button) */}
+        <View style={styles.header}>
+          {/* Left */}
+          <View
+            style={styles.headerSideLeft}
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              if (w && Math.abs(w - headerLeftW) > 1) setHeaderLeftW(w);
+            }}
+          >
             <TouchableOpacity 
-              style={styles.bottomBarItem} 
-              onPress={() => navigation.navigate("HomeAdmin")}
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
             >
-              <Feather name="home" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Home</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.bottomBarItem} 
-              onPress={() => navigation.navigate("NewsScreen")}
-            >
-              <Feather name="file-text" size={24} color="white" />
-              <Text style={styles.bottomBarText}>News</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.bottomBarItem} 
-              onPress={() => navigation.navigate("RiderScreen")}
-            >
-              <Feather name="users" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Rider</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.bottomBarItem} 
-              onPress={() => navigation.navigate("AdminAppointment")}
-            >
-              <Feather name="user" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Appointment</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.bottomBarItem} 
-              onPress={() => navigation.navigate("Me")}
-            >
-              <Feather name="user" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Profile</Text>
+              {/* ✅ same style as RiderScreen */}
+              <Text style={styles.backArrow}>◂</Text>
+              <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+
+          {/* Center */}
+          <Text
+            style={styles.headerTitle}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            Manage Appointments
+          </Text>
+
+          {/* Right spacer (same width as left) */}
+          <View style={[styles.headerSideRight, { width: headerLeftW || DEFAULT_HEADER_SIDE_W }]} />
+        </View>
+
+        <FlatList
+          data={pendingAppointments}
+          renderItem={renderAppointmentItem}
+          keyExtractor={(item) => item.id}
+          ListEmptyComponent={
+            <Text style={styles.noAppointmentsText}>
+              {loading ? 'Loading...' : 'No pending appointments'}
+            </Text>
+          }
+          contentContainerStyle={styles.content}
+          refreshing={loading}
+          onRefresh={() => {
+            setLoading(true);
+            fetchPendingAppointments();
+          }}
+        />
+
+        {/* Bottom Navigation */}
+        <View style={styles.bottomBar}>
+          <SafeAreaView style={styles.bottomSafe}>
+            <View style={styles.bottomInner}>
+              <TouchableOpacity 
+                style={styles.bottomBarItem} 
+                onPress={() => navigation.navigate("HomeAdmin")}
+              >
+                <Feather name="home" size={24} color="white" />
+                <Text style={styles.bottomBarText}>Home</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.bottomBarItem} 
+                onPress={() => navigation.navigate("NewsScreen")}
+              >
+                <Feather name="file-text" size={24} color="white" />
+                <Text style={styles.bottomBarText}>News</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.bottomBarItem} 
+                onPress={() => navigation.navigate("RiderScreen")}
+              >
+                <Feather name="users" size={24} color="white" />
+                <Text style={styles.bottomBarText}>Rider</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.bottomBarItem} 
+                onPress={() => navigation.navigate("AdminAppointment")}
+              >
+                <Feather name="user" size={24} color="white" />
+                <Text style={styles.bottomBarText}>Appointment</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.bottomBarItem} 
+                onPress={() => navigation.navigate("Me")}
+              >
+                <Feather name="user" size={24} color="white" />
+                <Text style={styles.bottomBarText}>Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  // full green sa pinaka-itaas
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#2e7d32',
+  },
   container: {
     flex: 1,
     backgroundColor: 'white'
   },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    paddingTop: 45,              // ✅ HINDI BINAGO
     backgroundColor: '#2e7d32',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-    height: 60
   },
+
+  // ✅ NEW: left/right sides for perfect centering
+  headerSideLeft: {
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  headerSideRight: {
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
+
+  // ✅ ginaya from RiderScreen
   backButton: {
-    marginRight: 15
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  backArrow: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginRight: 4,
   },
   backText: {
-    fontSize: 18,
-    color: 'white'
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
+
+  // ✅ centered title
   headerTitle: {
+    flex: 1,
     fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white'
+    fontWeight: '700',
+    color: 'white',
+    textAlign: 'center',
   },
+
   content: {
     padding: 10,
     paddingBottom: 50
@@ -292,14 +355,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 10
   },
-  // New styles for different appointment statuses
   approvedAppointmentItem: {
-    backgroundColor: '#e8f5e9',  // Light green
+    backgroundColor: '#e8f5e9',
     borderColor: '#2e7d32',
     borderWidth: 1
   },
   rejectedAppointmentItem: {
-    backgroundColor: '#ffebee',  // Light red
+    backgroundColor: '#ffebee',
     borderColor: '#d32f2f',
     borderWidth: 1
   },
@@ -313,12 +375,11 @@ const styles = StyleSheet.create({
     color: '#2e7d32',
     marginBottom: 5
   },
-  // New status-specific text styles
   approvedAppointmentText: {
-    color: '#2e7d32'  // Green text for approved
+    color: '#2e7d32'
   },
   rejectedAppointmentText: {
-    color: '#d32f2f'  // Red text for rejected
+    color: '#d32f2f'
   },
   appointmentText: {
     color: '#333',
@@ -334,7 +395,6 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row'
   },
-  // New style to hide action buttons for non-pending appointments
   hiddenActionButtons: {
     display: 'none'
   },
@@ -354,7 +414,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20
   },
-  // Rest of the existing styles remain the same
   bottomBar: {
     backgroundColor: '#2e7d32',
     borderTopLeftRadius: 20,

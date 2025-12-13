@@ -25,7 +25,6 @@ import { app } from "../config/firebaseConfig";
 import EditProfileModal from "./EditProfileModal";
 import TermsService from "./TermsService";
 import ContactUs from "./ContactUs";
-// ⬇️ gamitin na si SettingRider imbes na Settings (admin)
 import SettingsRider from "./SettingRider";
 
 const DEFAULT_AVATAR = require("../../assets/me.png");
@@ -40,6 +39,7 @@ export default function Me({ navigation }) {
     address: ""
   });
   const [userRole, setUserRole] = useState(null);
+  const [userDocId, setUserDocId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
@@ -53,63 +53,68 @@ export default function Me({ navigation }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const userDocRef = doc(db, "users", user.uid);
+          const usersRef = collection(db, "users");
+
+          // 1) Try doc na may ID = uid
+          const userDocRef = doc(usersRef, user.uid);
           const userDocSnap = await getDoc(userDocRef);
 
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            console.log("User Document Data:", userData);
-            
-            setUserData({
-              firstName: userData.firstName || "",
-              lastName: userData.lastName || "",
-              email: user.email || "No Email",
-              profileImage: userData.profileImage || null,
-              contactNumber: userData.contactNumber || "",
-              address: userData.address || ""
-            });
-            
-            const role = userData.role || "Rider";
-            console.log("Detected Role:", role);
-            setUserRole(role);
-            
-          } else {
-            // Fallback: Search users collection by email
-            const usersRef = collection(db, "users");
+          let finalData = null;
+          let finalDocId = null;
+
+          if (userDocSnap.exists() && userDocSnap.data()) {
+            finalData = userDocSnap.data();
+            finalDocId = userDocSnap.id;
+          }
+
+          // 2) Kung wala / walang role, hanap by email, piliin may role
+          if (!finalData || !finalData.role) {
             const q = query(usersRef, where("email", "==", user.email));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
-              const userDoc = querySnapshot.docs[0].data();
-              
-              setUserData({
-                firstName: userDoc.firstName || "",
-                lastName: userDoc.lastName || "",
-                email: user.email || "No Email",
-                profileImage: userDoc.profileImage || null,
-                contactNumber: userDoc.contactNumber || "",
-                address: userDoc.address || ""
-              });
-              
-              const role = userDoc.role || "Rider";
-              setUserRole(role);
-              
-            } else {
-              setUserData({
-                firstName: "Rider",
-                lastName: "",
-                email: user.email || "No Email",
-                profileImage: null,
-                contactNumber: "",
-                address: ""
-              });
-              setUserRole("Rider");
+              const docWithRole = querySnapshot.docs.find(d => !!d.data().role);
+              const chosenDoc = docWithRole || querySnapshot.docs[0];
+
+              finalData = chosenDoc.data();
+              finalDocId = chosenDoc.id;
             }
+          }
+
+          if (finalData) {
+            console.log("User Document Data:", finalData);
+
+            setUserData({
+              firstName: finalData.firstName || "",
+              lastName: finalData.lastName || "",
+              email: user.email || "No Email",
+              profileImage: finalData.profileImage || null,
+              contactNumber: finalData.contactNumber || "",
+              address: finalData.address || ""
+            });
+
+            const role = finalData.role || "Rider";
+            console.log("Detected Role:", role);
+            setUserRole(role);
+            setUserDocId(finalDocId);
+          } else {
+            // No doc sa Firestore → treat as Rider
+            setUserData({
+              firstName: "Rider",
+              lastName: "",
+              email: user.email || "No Email",
+              profileImage: null,
+              contactNumber: "",
+              address: ""
+            });
+            setUserRole("Rider");
+            setUserDocId(user.uid);
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
           Alert.alert("Error", "Could not fetch user data");
           setUserRole("Rider");
+          setUserDocId(user?.uid ?? null);
         } finally {
           setLoading(false);
         }
@@ -186,6 +191,11 @@ export default function Me({ navigation }) {
   const handleUpdateUser = (updatedData) => {
     console.log("User data updated:", updatedData);
     setUserData(prev => ({ ...prev, ...updatedData }));
+
+    if (updatedData.role) {
+      setUserRole(updatedData.role);
+    }
+
     setIsEditModalVisible(false);
   };
 
@@ -200,140 +210,149 @@ export default function Me({ navigation }) {
   const isRider = userRole === "Rider";
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header with ◂ Back + centered Profile */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backText}>◂ Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-      </View>
-      
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Avatar Section */}
-        <View style={styles.avatarWrap}>
-          <Image 
-            source={
-              userData.profileImage 
-                ? { uri: userData.profileImage } 
-                : DEFAULT_AVATAR
-            } 
-            style={styles.avatar} 
-          />
-          <Text style={styles.name}>{getFullName()}</Text>
-          <Text style={styles.email}>{userData.email}</Text>
-          {userRole && (
-            <Text style={[styles.roleTag, isRider && styles.riderTag]}>
-              {userRole}
-            </Text>
-          )}
-        </View>
-
-        {/* Account Details Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Account Details</Text>
-          <View style={styles.row}>
-            <Text style={styles.rowText}>Contact Number</Text>
-            <Text style={styles.chev}>{userData.contactNumber || "Not Set"}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowText}>Address</Text>
-            <Text style={styles.chev}>{userData.address || "Not Set"}</Text>
-          </View>
-        </View>
-
-        {/* Account Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Account</Text>
-          <TouchableOpacity 
-            onPress={onEditProfile}
-            style={styles.row}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.rowText}>Edit Profile</Text>
-            <Text style={styles.chev}>›</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            onPress={() => setIsTermsModalVisible(true)}
-            style={styles.row}
-          >
-            <Text style={styles.rowText}>Terms of Service</Text>
-            <Text style={styles.chev}>›</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            onPress={() => setIsContactUsModalVisible(true)}
-            style={styles.row}
-          >
-            <Text style={styles.rowText}>Contact Us</Text>
-            <Text style={styles.chev}>›</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* App Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>App</Text>
-          <TouchableOpacity
-            onPress={() => setIsSettingsModalVisible(true)}
-            style={styles.row}
-          >
-            <Text style={styles.rowText}>Settings</Text>
-            <Text style={styles.chev}>›</Text>
-          </TouchableOpacity>
-
-          {/* Delete Account - Only for non-riders */}
-          {!isRider && (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* ✅ Full green header: Back left, Profile centered */}
+        <View style={styles.header}>
+          {/* Left side: Back */}
+          <View style={styles.headerSide}>
             <TouchableOpacity
-              onPress={onDeleteAccount}
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.backArrow}>◂</Text>
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Center: Title */}
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Profile</Text>
+          </View>
+
+          {/* Right side: empty placeholder para tunay na center si Profile */}
+          <View style={styles.headerSide} />
+        </View>
+        
+        <ScrollView contentContainerStyle={styles.content}>
+          {/* Avatar Section */}
+          <View style={styles.avatarWrap}>
+            <Image 
+              source={
+                userData.profileImage 
+                  ? { uri: userData.profileImage } 
+                  : DEFAULT_AVATAR
+              } 
+              style={styles.avatar} 
+            />
+            <Text style={styles.name}>{getFullName()}</Text>
+            <Text style={styles.email}>{userData.email}</Text>
+            {userRole && (
+              <Text style={[styles.roleTag, isRider && styles.riderTag]}>
+                {userRole}
+              </Text>
+            )}
+          </View>
+
+          {/* Account Details Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>Account Details</Text>
+            <View style={styles.row}>
+              <Text style={styles.rowText}>Contact Number</Text>
+              <Text style={styles.chev}>{userData.contactNumber || "Not Set"}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowText}>Address</Text>
+              <Text style={styles.chev}>{userData.address || "Not Set"}</Text>
+            </View>
+          </View>
+
+          {/* Account Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>Account</Text>
+            <TouchableOpacity 
+              onPress={onEditProfile}
+              style={styles.row}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.rowText}>Edit Profile</Text>
+              <Text style={styles.chev}>›</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => setIsTermsModalVisible(true)}
+              style={styles.row}
+            >
+              <Text style={styles.rowText}>Terms of Service</Text>
+              <Text style={styles.chev}>›</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => setIsContactUsModalVisible(true)}
+              style={styles.row}
+            >
+              <Text style={styles.rowText}>Contact Us</Text>
+              <Text style={styles.chev}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* App Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>App</Text>
+            <TouchableOpacity
+              onPress={() => setIsSettingsModalVisible(true)}
+              style={styles.row}
+            >
+              <Text style={styles.rowText}>Settings</Text>
+              <Text style={styles.chev}>›</Text>
+            </TouchableOpacity>
+
+            {!isRider && (
+              <TouchableOpacity
+                onPress={onDeleteAccount}
+                style={[styles.row, styles.rowDanger]}
+              >
+                <Text style={[styles.rowText, styles.dangerText]}>Delete Account</Text>
+                <Text style={[styles.chev, styles.dangerText]}>›</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              onPress={onLogout}
               style={[styles.row, styles.rowDanger]}
             >
-              <Text style={[styles.rowText, styles.dangerText]}>Delete Account</Text>
+              <Text style={[styles.rowText, styles.dangerText]}>Log Out</Text>
               <Text style={[styles.chev, styles.dangerText]}>›</Text>
             </TouchableOpacity>
-          )}
+          </View>
+        </ScrollView>
 
-          {/* Logout */}
-          <TouchableOpacity
-            onPress={onLogout}
-            style={[styles.row, styles.rowDanger]}
-          >
-            <Text style={[styles.rowText, styles.dangerText]}>Log Out</Text>
-            <Text style={[styles.chev, styles.dangerText]}>›</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        {/* Modals */}
+        <EditProfileModal
+          visible={isEditModalVisible}
+          onClose={() => setIsEditModalVisible(false)}
+          userData={userData}
+          userRole={userRole}
+          userDocId={userDocId}
+          onUpdateUser={handleUpdateUser}
+        />
 
-      {/* Edit Profile Modal */}
-      <EditProfileModal
-        visible={isEditModalVisible}
-        onClose={() => setIsEditModalVisible(false)}
-        userData={userData}
-        userRole={userRole}
-        onUpdateUser={handleUpdateUser}
-      />
+        <TermsService
+          visible={isTermsModalVisible}
+          onClose={() => setIsTermsModalVisible(false)}
+        />
 
-      {/* Terms of Service Modal */}
-      <TermsService
-        visible={isTermsModalVisible}
-        onClose={() => setIsTermsModalVisible(false)}
-      />
+        <ContactUs
+          visible={isContactUsModalVisible}
+          onClose={() => setIsContactUsModalVisible(false)}
+        />
 
-      {/* Contact Us Modal */}
-      <ContactUs
-        visible={isContactUsModalVisible}
-        onClose={() => setIsContactUsModalVisible(false)}
-      />
-
-      {/* Settings Modal for Rider */}
-      <SettingsRider
-        visible={isSettingsModalVisible}
-        onClose={() => setIsSettingsModalVisible(false)}
-        userName={getFullName()}
-      />
+        <SettingsRider
+          visible={isSettingsModalVisible}
+          onClose={() => setIsSettingsModalVisible(false)}
+          userName={getFullName()}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -345,35 +364,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff'
   },
+  // para full green hanggang status bar
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#2e7d32'
+  },
   container: { 
     flex: 1, 
     backgroundColor: "#fff" 
   },
+
+  // 🔹 HEADER
   header: {
-    height: 72,
-    backgroundColor: "#2e7d32",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",   // center si "Profile"
     paddingHorizontal: 16,
-    position: "relative",
+    paddingTop: 40,         // layo sa oras/notif
+    paddingBottom: 10,
+    backgroundColor: "#2e7d32",
+    borderBottomWidth: 1,
+    borderBottomColor: "#2e7d32",
+  },
+  headerSide: {
+    width: 80,              // fixed width para sa Back at placeholder
+    justifyContent: "center",
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   backButton: {
-    position: "absolute",
-    left: 16,
-    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  backArrow: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    marginRight: 4
   },
   backText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: "600"
   },
   headerTitle: { 
     color: "#fff", 
     fontSize: 20, 
-    fontWeight: "700" 
+    fontWeight: "700",
   },
+
   content: { 
     padding: 16, 
     paddingBottom: 40 

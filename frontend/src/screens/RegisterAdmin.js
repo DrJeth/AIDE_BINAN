@@ -11,10 +11,11 @@ import {
   Platform,
   Modal,
   FlatList,
-  KeyboardAvoidingView, // ✅ ADDED
+  KeyboardAvoidingView,
+  StatusBar,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import {
   getFirestore,
   collection,
@@ -54,18 +55,18 @@ export default function RegisterAdmin({ navigation }) {
   const [positionModalVisible, setPositionModalVisible] = useState(false);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
   const [birthdayDate, setBirthdayDate] = useState(new Date());
-  const [showPassword, setShowPassword] = useState(false); // ✅ USED NOW
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // ✅ USED NOW
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const firstInitial = form.firstName.charAt(0).toUpperCase();
   const lastInitial = form.lastName.charAt(0).toUpperCase();
   const employeeNum = form.employeeNumber;
+
   const scrollViewRef = useRef(null);
   const db = getFirestore();
 
   const handleBirthdayChange = (event, selectedDate) => {
-    if (Platform.OS === "android") {
-      setShowBirthdayPicker(false);
-    }
+    if (Platform.OS === "android") setShowBirthdayPicker(false);
 
     if (selectedDate) {
       setBirthdayDate(selectedDate);
@@ -83,29 +84,35 @@ export default function RegisterAdmin({ navigation }) {
     return dateString;
   };
 
+  // ✅ AUTO FORMAT: uppercase personal info + lowercase email (remove spaces)
   const update = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    let v = value ?? "";
+
+    const UPPERCASE_KEYS = ["firstName", "middleName", "lastName", "address"];
+    if (UPPERCASE_KEYS.includes(key)) v = v.toUpperCase();
+
+    if (key === "email") v = v.toLowerCase().replace(/\s/g, "");
+
+    setForm((prev) => ({ ...prev, [key]: v }));
   };
 
-  const isValidEmployeeNumber = (empNum) => {
-    const employeeNumberRegex = /^\d{4}$/;
-    return employeeNumberRegex.test(empNum);
-  };
+  const isValidEmployeeNumber = (empNum) => /^\d{4}$/.test(empNum);
 
   const expectedPattern = new RegExp(
     `^${firstInitial}${lastInitial}[0-9]{6}${employeeNum}$`
   );
 
+  // ✅ Gmail only
   const isValidEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    const clean = (email || "").toLowerCase().trim();
+    const gmailRegex = /^[a-z0-9._%+-]+@gmail\.com$/;
+    return gmailRegex.test(clean);
   };
 
-  // ✅ UPDATED: must start with 09 and be exactly 11 digits
+  // ✅ must start with 09 and be exactly 11 digits
   const isValidContactNumber = (phone) => {
     const digitsOnly = phone.replace(/[^0-9]/g, "");
-    const phoneRegex = /^09\d{9}$/; // 09 + 9 digits = 11
-    return phoneRegex.test(digitsOnly);
+    return /^09\d{9}$/.test(digitsOnly);
   };
 
   const validatePersonalInfo = () => {
@@ -164,7 +171,10 @@ export default function RegisterAdmin({ navigation }) {
     }
 
     if (!isValidEmail(form.email)) {
-      Alert.alert("Error", "Please enter a valid email address");
+      Alert.alert(
+        "Error",
+        "Email must be a valid Gmail address (example@gmail.com)"
+      );
       return false;
     }
 
@@ -173,7 +183,6 @@ export default function RegisterAdmin({ navigation }) {
       return false;
     }
 
-    // ✅ still using your original expectedPattern validation
     if (!expectedPattern.test(form.password)) {
       Alert.alert("Error", "Invalid password format.");
       return false;
@@ -187,39 +196,54 @@ export default function RegisterAdmin({ navigation }) {
     return true;
   };
 
+  // ✅ CONFIRMATION before leaving
+  const confirmExit = () => {
+    if (loading) return;
+
+    Alert.alert(
+      "Leave registration?",
+      "Your entered information will not be saved. Do you want to go back?",
+      [
+        { text: "Stay", style: "cancel" },
+        {
+          text: "Go Back",
+          style: "destructive",
+          onPress: () => navigation.goBack(),
+        },
+      ]
+    );
+  };
+
   const handleSubmit = async () => {
     if (!validateWorkInfo()) return;
 
     setLoading(true);
-
     try {
+      const normalizedEmail = (form.email || "").toLowerCase().trim();
+
       const employeeQuery = query(
         collection(db, "users"),
         where("employeeNumber", "==", form.employeeNumber)
       );
       const employeeSnapshot = await getDocs(employeeQuery);
-
       if (!employeeSnapshot.empty) {
         Alert.alert("Error", "Employee number already exists");
-        setLoading(false);
         return;
       }
 
       const emailQuery = query(
         collection(db, "users"),
-        where("email", "==", form.email)
+        where("email", "==", normalizedEmail)
       );
       const emailSnapshot = await getDocs(emailQuery);
-
       if (!emailSnapshot.empty) {
         Alert.alert("Error", "Email already exists");
-        setLoading(false);
         return;
       }
 
       const userCredential = await createUserWithEmailAndPassword(
         auth,
-        form.email,
+        normalizedEmail,
         form.password
       );
 
@@ -234,7 +258,7 @@ export default function RegisterAdmin({ navigation }) {
         employeeNumber: form.employeeNumber,
         department: form.department,
         position: form.position,
-        email: form.email,
+        email: normalizedEmail,
         role: "Admin",
         createdAt: new Date().toISOString(),
         status: "active",
@@ -261,6 +285,7 @@ export default function RegisterAdmin({ navigation }) {
         placeholderTextColor="#999"
         value={form.firstName}
         onChangeText={(v) => update("firstName", v)}
+        autoCapitalize="characters"
       />
 
       <Text style={styles.fieldLabel}>Middle Name (Optional)</Text>
@@ -270,6 +295,7 @@ export default function RegisterAdmin({ navigation }) {
         placeholderTextColor="#999"
         value={form.middleName}
         onChangeText={(v) => update("middleName", v)}
+        autoCapitalize="characters"
       />
 
       <Text style={styles.fieldLabel}>Last Name</Text>
@@ -279,6 +305,7 @@ export default function RegisterAdmin({ navigation }) {
         placeholderTextColor="#999"
         value={form.lastName}
         onChangeText={(v) => update("lastName", v)}
+        autoCapitalize="characters"
       />
 
       <Text style={styles.fieldLabel}>Birthday</Text>
@@ -339,6 +366,7 @@ export default function RegisterAdmin({ navigation }) {
         placeholderTextColor="#999"
         value={form.address}
         onChangeText={(v) => update("address", v)}
+        autoCapitalize="characters"
       />
     </View>
   );
@@ -386,9 +414,7 @@ export default function RegisterAdmin({ navigation }) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Position</Text>
-              <TouchableOpacity
-                onPress={() => setPositionModalVisible(false)}
-              >
+              <TouchableOpacity onPress={() => setPositionModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -410,8 +436,7 @@ export default function RegisterAdmin({ navigation }) {
                   <Text
                     style={[
                       styles.positionItemText,
-                      form.position === item &&
-                        styles.positionItemTextSelected,
+                      form.position === item && styles.positionItemTextSelected,
                     ]}
                   >
                     {item}
@@ -429,15 +454,15 @@ export default function RegisterAdmin({ navigation }) {
       <Text style={styles.fieldLabel}>Email</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="example@gmail.com"
         placeholderTextColor="#999"
         value={form.email}
         onChangeText={(v) => update("email", v)}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
       />
 
-      {/* ✅ PASSWORD WITH SHOW/HIDE */}
       <Text style={styles.fieldLabel}>Password</Text>
       <View style={[styles.input, styles.passwordRow]}>
         <TextInput
@@ -452,13 +477,10 @@ export default function RegisterAdmin({ navigation }) {
           onPress={() => setShowPassword((prev) => !prev)}
           disabled={loading}
         >
-          <Text style={styles.toggleText}>
-            {showPassword ? "Hide" : "Show"}
-          </Text>
+          <Text style={styles.toggleText}>{showPassword ? "Hide" : "Show"}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ✅ CONFIRM PASSWORD WITH SHOW/HIDE */}
       <Text style={styles.fieldLabel}>Confirm Password</Text>
       <View style={[styles.input, styles.passwordRow]}>
         <TextInput
@@ -479,25 +501,19 @@ export default function RegisterAdmin({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <View className="spacer" style={styles.spacer} />
+      <View style={styles.spacer} />
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ✅ KeyboardAvoidingView to prevent keyboard from covering fields */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
       >
+        {/* ✅ HEADER (No back button + moved down) */}
         <View style={styles.headerContainer}>
-          <TouchableOpacity
-            style={styles.backButtonHeader}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backText}>◂</Text>
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>Create Admin Account</Text>
         </View>
 
@@ -506,17 +522,27 @@ export default function RegisterAdmin({ navigation }) {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag" // ✅ helps hide keyboard when scrolling
+          keyboardDismissMode="on-drag"
         >
           {activeSection === "personal"
             ? renderPersonalSection()
             : renderWorkSection()}
 
+          {/* ✅ BUTTONS (Personal has Back+Next now with confirmation) */}
           <View style={styles.navigationButtons}>
-            {activeSection === "work" && (
+            {activeSection === "personal" ? (
+              <TouchableOpacity
+                style={[styles.button, styles.backButtonStyle]}
+                onPress={confirmExit} // ✅ confirm before leaving
+                disabled={loading}
+              >
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+            ) : (
               <TouchableOpacity
                 style={[styles.button, styles.backButtonStyle]}
                 onPress={() => setActiveSection("personal")}
+                disabled={loading}
               >
                 <Text style={styles.backButtonText}>Back</Text>
               </TouchableOpacity>
@@ -553,43 +579,33 @@ export default function RegisterAdmin({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
+
   headerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
+    paddingTop:
+      Platform.OS === "android"
+        ? (StatusBar.currentHeight || 0) + 12
+        : 15,
+    paddingBottom: 15,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
-  },
-  backButtonHeader: {
-    marginRight: 10,
-  },
-  backText: {
-    fontSize: 24,
-    color: "#000",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
+    width: "100%",
     fontSize: 20,
     fontWeight: "600",
     color: "#000",
+    textAlign: "center",
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  spacer: {
-    height: 100,
-  },
-  formSection: {
-    marginTop: 10,
-  },
+
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingVertical: 20 },
+
+  spacer: { height: 100 },
+  formSection: { marginTop: 10 },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
@@ -602,6 +618,7 @@ const styles = StyleSheet.create({
     color: "#000",
     marginBottom: 6,
   },
+
   input: {
     borderWidth: 1,
     borderColor: "#E0E0E0",
@@ -612,28 +629,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#000",
   },
-  departmentContainer: {
-    marginBottom: 15,
-  },
-  departmentLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 8,
-    fontWeight: "500",
-  },
-  departmentValue: {
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    backgroundColor: "#F9F9F9",
-  },
-  departmentText: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
-  },
+
   dropdownInput: {
     borderWidth: 1,
     borderColor: "#E0E0E0",
@@ -645,17 +641,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  dropdownText: {
-    fontSize: 14,
-    color: "#000",
-  },
-  placeholderText: {
-    color: "#999",
-  },
-  dropdownIcon: {
-    fontSize: 12,
-    color: "#666",
-  },
+  dropdownText: { fontSize: 14, color: "#000" },
+  placeholderText: { color: "#999" },
+  dropdownIcon: { fontSize: 12, color: "#666" },
+
   datePickerInput: {
     borderWidth: 1,
     borderColor: "#E0E0E0",
@@ -667,13 +656,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  datePickerText: {
-    fontSize: 14,
-    color: "#000",
-  },
-  datePickerIcon: {
-    fontSize: 18,
-  },
+  datePickerText: { fontSize: 14, color: "#000" },
+  datePickerIcon: { fontSize: 18 },
+
   iosBirthdayPickerButtons: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -694,6 +679,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 14,
   },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -715,15 +701,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
   },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000",
-  },
-  closeButton: {
-    fontSize: 24,
-    color: "#666",
-  },
+  modalTitle: { fontSize: 16, fontWeight: "600", color: "#000" },
+  closeButton: { fontSize: 24, color: "#666" },
+
   positionItem: {
     paddingHorizontal: 20,
     paddingVertical: 15,
@@ -733,22 +713,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  positionItemSelected: {
-    backgroundColor: "#E8F5E9",
-  },
-  positionItemText: {
-    fontSize: 14,
-    color: "#333",
-  },
-  positionItemTextSelected: {
-    color: "#4CAF50",
-    fontWeight: "600",
-  },
-  checkmark: {
-    fontSize: 18,
-    color: "#4CAF50",
-    fontWeight: "bold",
-  },
+  positionItemSelected: { backgroundColor: "#E8F5E9" },
+  positionItemText: { fontSize: 14, color: "#333" },
+  positionItemTextSelected: { color: "#4CAF50", fontWeight: "600" },
+  checkmark: { fontSize: 18, color: "#4CAF50", fontWeight: "bold" },
+
   navigationButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -764,25 +733,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flex: 1,
   },
-  backButtonStyle: {
-    backgroundColor: "#F0F0F0",
-  },
-  nextButton: {
-    backgroundColor: "#4CAF50",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  backButtonText: {
-    color: "#000",
-    fontWeight: "500",
-  },
-  nextButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
+  backButtonStyle: { backgroundColor: "#F0F0F0" },
+  nextButton: { backgroundColor: "#4CAF50" },
+  buttonDisabled: { opacity: 0.6 },
+  backButtonText: { color: "#000", fontWeight: "500" },
+  nextButtonText: { color: "#FFFFFF", fontWeight: "500" },
 
-  // ✅ NEW styles for password show/hide
   passwordRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -797,9 +753,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#000",
   },
-  toggleText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#4CAF50",
-  },
+  toggleText: { fontSize: 13, fontWeight: "500", color: "#4CAF50" },
 });
