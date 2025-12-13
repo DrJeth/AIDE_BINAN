@@ -17,15 +17,18 @@ const CONTENT_W = Math.min(330, WINDOW_W - 36);
 export default function Purpose({ navigation }) {
   return (
     <SafeAreaView style={styles.screen}>
-      
       {/* Header green curved top */}
-      <View style={styles.topGreen}>
+      <View style={styles.topGreen} pointerEvents="none">
         <Text style={styles.headerTitle}>Purpose and Scope</Text>
       </View>
 
       {/* Back Button - aligned with header */}
       <Pressable
-        onPress={() => navigation?.goBack()}
+        onPress={() => navigation?.goBack?.()}
+        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }} // ✅ easier to tap
+        pressRetentionOffset={{ top: 20, left: 20, bottom: 20, right: 20 }}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
         style={({ pressed }) => [styles.backWrap, pressed && styles.backPressed]}
         android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
       >
@@ -35,13 +38,14 @@ export default function Purpose({ navigation }) {
       </Pressable>
 
       {/* Decorative green circle (right side) */}
-      <View style={styles.rightGreenCircle} />
+      <View style={styles.rightGreenCircle} pointerEvents="none" />
 
       {/* AIDE logo top-right */}
       <Image
         source={require("../../assets/scooter-icon.png")}
         style={styles.topRightBadge}
         resizeMode="contain"
+        pointerEvents="none"
       />
 
       {/* Content Section */}
@@ -50,12 +54,12 @@ export default function Purpose({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CONTENT_W }]}>
-
           {/* Binan Logo - Original Position */}
           <Image
             source={require("../../assets/binan-logo.png")}
             style={styles.binanLogo}
             resizeMode="contain"
+            pointerEvents="none"
           />
 
           {/* Description text */}
@@ -65,7 +69,6 @@ export default function Purpose({ navigation }) {
             used as a mode of transportation within the territorial jurisdiction
             of the City of Biñan, Laguna.
           </Text>
-
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -106,8 +109,9 @@ const styles = StyleSheet.create({
   backWrap: {
     position: "absolute",
     left: 12,
-    top: 70,   // <-- PERFECTLY LEVEL WITH TITLE
+    top: 70, // <-- PERFECTLY LEVEL WITH TITLE
     zIndex: 10,
+    elevation: 20, // ✅ Android: makes sure it's above and clickable
   },
 
   backPressed: { opacity: 0.8 },
