@@ -11,7 +11,7 @@ import {
 } from "react-native";
 
 const { width: WINDOW_W } = Dimensions.get("window");
-const CARD_W = Math.min(300, WINDOW_W - 40); // narrow column as in screenshot
+const CARD_W = Math.min(300, WINDOW_W - 40);
 const GREEN = "#2e7d32";
 
 export default function Requirements({ navigation }) {
@@ -45,17 +45,20 @@ City Ordinance No. 21-(2023) dated September 4, 2023
 
   return (
     <SafeAreaView style={styles.screen}>
-      {/* ========== HEADER (same style as Definition screens) ========== */}
+      {/* ========== HEADER ========== */}
       <View style={styles.headerGreen}>
+        <Text style={styles.headerTitle}>Requirements for Registration</Text>
+
+        {/* Back Button (Purpose.js style) */}
         <Pressable
           onPress={handleBack}
-          style={styles.backCircle}
-          android_ripple={{ color: "rgba(0,0,0,0.1)", borderless: true }}
+          style={({ pressed }) => [styles.backWrap, pressed && styles.btnPressed]}
+          android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: true }}
         >
-          <Text style={styles.backIcon}>‹</Text>
+          <View style={styles.circleBtn}>
+            <Text style={styles.arrowText}>‹</Text>
+          </View>
         </Pressable>
-
-        <Text style={styles.headerTitle}>Requirements for Registration</Text>
       </View>
 
       {/* ========== CONTENT ========== */}
@@ -64,8 +67,6 @@ City Ordinance No. 21-(2023) dated September 4, 2023
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: CARD_W }]}>
-          {/* shape removed – clean white card */}
-
           <Text style={styles.bodyText}>
             {body.split("\n\n").map((p, i) => (
               <Text
@@ -96,7 +97,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  /* header same as Definition1/2/3 */
   headerGreen: {
     position: "absolute",
     top: 0,
@@ -112,36 +112,44 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  backCircle: {
-    position: "absolute",
-    left: 16,
-    top: 35,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#ffffff",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 5,
-  },
-
-  backIcon: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: GREEN,
-  },
-
   headerTitle: {
     marginTop: 8,
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
+    paddingHorizontal: 70, // keeps space away from left back button
   },
 
-  /* content */
+  // ===== Back button (Purpose.js style) =====
+  backWrap: {
+    position: "absolute",
+    left: 16,
+    top: 32,
+    zIndex: 20,
+  },
+
+  btnPressed: { opacity: 0.8 },
+
+  circleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  arrowText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
   scrollArea: {
-    paddingTop: 130, // push content below the rounded header
+    paddingTop: 130,
     alignItems: "center",
     paddingHorizontal: 12,
     paddingBottom: 24,
