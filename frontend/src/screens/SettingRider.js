@@ -14,11 +14,11 @@ import {
   Switch,
 } from "react-native";
 import { auth } from "../config/firebaseConfig";
-import { 
-  updateEmail, 
-  updatePassword, 
+import {
+  updateEmail,
+  updatePassword,
   reauthenticateWithCredential,
-  EmailAuthProvider 
+  EmailAuthProvider
 } from "firebase/auth";
 import { collection, getFirestore, query, where, getDocs, updateDoc } from "firebase/firestore";
 
@@ -26,28 +26,28 @@ import { collection, getFirestore, query, where, getDocs, updateDoc } from "fire
 // const ICON_BACK = require("./../../assets/top-emblem.png");
 const ICON_CHEVRON = require("./../../assets/chevron-right.png");
 
-export default function Settings({ 
-  visible = false, 
-  onClose = () => {}, 
+export default function Settings({
+  visible = false,
+  onClose = () => {},
   userName = "User Account"
 }) {
   const [screen, setScreen] = useState("main");
   const [loading, setLoading] = useState(false);
-  
+
   // Email state
   const [newEmail, setNewEmail] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
   const [emailPassword, setEmailPassword] = useState("");
-  
+
   // Password state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  
+
   // 2FA state
   const [enabled2FA, setEnabled2FA] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
-  
+
   // Email verification state
   const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
 
@@ -144,10 +144,10 @@ export default function Settings({
       setScreen("main");
     } catch (error) {
       console.error("Error updating email:", error);
-      
-      if (error.code === 'auth/wrong-password') {
+
+      if (error.code === "auth/wrong-password") {
         Alert.alert("Error", "Password is incorrect");
-      } else if (error.code === 'auth/email-already-in-use') {
+      } else if (error.code === "auth/email-already-in-use") {
         Alert.alert("Error", "This email is already in use");
       } else {
         Alert.alert("Error", error.message || "Failed to update email");
@@ -206,10 +206,10 @@ export default function Settings({
       setScreen("main");
     } catch (error) {
       console.error("Error updating password:", error);
-      
-      if (error.code === 'auth/wrong-password') {
+
+      if (error.code === "auth/wrong-password") {
         Alert.alert("Error", "Current password is incorrect");
-      } else if (error.code === 'auth/weak-password') {
+      } else if (error.code === "auth/weak-password") {
         Alert.alert("Error", "Password is too weak. Use a stronger password");
       } else {
         Alert.alert("Error", error.message || "Failed to update password");
@@ -233,7 +233,7 @@ export default function Settings({
     setLoading(true);
     try {
       const user = auth.currentUser;
-      
+
       if (!user) {
         Alert.alert("Error", "User not logged in");
         setLoading(false);
@@ -251,7 +251,7 @@ export default function Settings({
 
       if (!userSnapshot.empty) {
         const userDocRef = userSnapshot.docs[0].ref;
-        
+
         // Update with 2FA enabled
         await updateDoc(userDocRef, {
           twoFAEnabled: true,
@@ -285,7 +285,7 @@ export default function Settings({
             setLoading(true);
             try {
               const user = auth.currentUser;
-              
+
               if (!user) {
                 Alert.alert("Error", "User not logged in");
                 setLoading(false);
@@ -303,7 +303,7 @@ export default function Settings({
 
               if (!userSnapshot.empty) {
                 const userDocRef = userSnapshot.docs[0].ref;
-                
+
                 // Disable 2FA
                 await updateDoc(userDocRef, {
                   twoFAEnabled: false,
@@ -332,7 +332,7 @@ export default function Settings({
     setLoading(true);
     try {
       const user = auth.currentUser;
-      
+
       if (!user) {
         Alert.alert("Error", "User not logged in");
         setLoading(false);
@@ -350,7 +350,7 @@ export default function Settings({
 
       if (!userSnapshot.empty) {
         const userDocRef = userSnapshot.docs[0].ref;
-        
+
         // Update email verification setting
         await updateDoc(userDocRef, {
           emailVerificationEnabled: value
@@ -368,33 +368,6 @@ export default function Settings({
     } finally {
       setLoading(false);
     }
-  };
-
-  // ===== LOGOUT FUNCTION =====
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await auth.signOut();
-              Alert.alert("Success", "Logged out");
-              onClose();
-            } catch (error) {
-              Alert.alert("Error", "Failed to logout");
-            } finally {
-              setLoading(false);
-            }
-          },
-          style: "destructive"
-        }
-      ]
-    );
   };
 
   return (
@@ -444,8 +417,8 @@ export default function Settings({
 
                   <View style={styles.divider} />
 
-                  <Pressable 
-                    style={[styles.row, loading && { opacity: 0.5 }]} 
+                  <Pressable
+                    style={[styles.row, loading && { opacity: 0.5 }]}
                     onPress={() => setScreen("password")}
                     disabled={loading}
                   >
@@ -460,33 +433,18 @@ export default function Settings({
 
                   <View style={styles.divider} />
 
-                  <Pressable 
-                    style={[styles.row, loading && { opacity: 0.5 }]} 
+                  <Pressable
+                    style={[styles.row, loading && { opacity: 0.5 }]}
                     onPress={() => setScreen("2fa")}
                     disabled={loading}
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.rowLabelBold}>2-step verification</Text>
                       <Text style={styles.rowSub}>
-                        {enabled2FA ? "✓ Enabled" : "Add an additional layer of security to your account during sign in"}
+                        {enabled2FA
+                          ? "✓ Enabled"
+                          : "Add an additional layer of security to your account during sign in"}
                       </Text>
-                    </View>
-                    <Image source={ICON_CHEVRON} style={styles.chevron} resizeMode="contain" />
-                  </Pressable>
-                </View>
-
-                <View style={{ height: 18 }} />
-
-                {/* Logout Card */}
-                <View style={styles.card}>
-                  <Pressable 
-                    style={[styles.row, loading && { opacity: 0.5 }]} 
-                    onPress={handleLogout}
-                    disabled={loading}
-                  >
-                    <View>
-                      <Text style={styles.rowLabelBold}>Logout</Text>
-                      <Text style={styles.rowSub}>Log out of this active session.</Text>
                     </View>
                     <Image source={ICON_CHEVRON} style={styles.chevron} resizeMode="contain" />
                   </Pressable>
@@ -496,8 +454,8 @@ export default function Settings({
               </ScrollView>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]} 
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]}
                   onPress={onClose}
                   disabled={loading}
                 >
@@ -554,8 +512,8 @@ export default function Settings({
                     secureTextEntry={true}
                   />
 
-                  <TouchableOpacity 
-                    style={[styles.actionButton, loading && { opacity: 0.5 }]} 
+                  <TouchableOpacity
+                    style={[styles.actionButton, loading && { opacity: 0.5 }]}
                     onPress={handleEmailUpdate}
                     disabled={loading}
                   >
@@ -571,8 +529,8 @@ export default function Settings({
               </ScrollView>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]} 
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]}
                   onPress={() => {
                     setScreen("main");
                     setNewEmail("");
@@ -632,8 +590,8 @@ export default function Settings({
                     editable={!loading}
                   />
 
-                  <TouchableOpacity 
-                    style={[styles.actionButton, loading && { opacity: 0.5 }]} 
+                  <TouchableOpacity
+                    style={[styles.actionButton, loading && { opacity: 0.5 }]}
                     onPress={handlePasswordUpdate}
                     disabled={loading}
                   >
@@ -649,8 +607,8 @@ export default function Settings({
               </ScrollView>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]} 
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]}
                   onPress={() => {
                     setScreen("main");
                     setCurrentPassword("");
@@ -705,8 +663,8 @@ export default function Settings({
               </ScrollView>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]} 
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton, loading && { opacity: 0.5 }]}
                   onPress={() => setScreen("main")}
                   disabled={loading}
                 >
@@ -724,28 +682,28 @@ export default function Settings({
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)'
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)"
   },
   loadingOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.3)",
     zIndex: 999
   },
   modalContent: {
-    width: '90%',
+    width: "90%",
     maxWidth: 400,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 10,
-    maxHeight: '90%',
-    overflow: 'hidden',
+    maxHeight: "90%",
+    overflow: "hidden"
   },
 
   header: {
@@ -755,7 +713,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 10,
     justifyContent: "center",
     alignItems: "center",
-    position: "relative",
+    position: "relative"
   },
   // backWrap & backIcon no longer used but you can delete if you want
   backWrap: {
@@ -765,23 +723,23 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "center"
   },
   backIcon: {
     width: 18,
     height: 18,
-    tintColor: "#fff",
+    tintColor: "#fff"
   },
   title: {
     color: "#fff",
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "700"
   },
 
   content: {
     paddingHorizontal: 12,
     paddingTop: 12,
-    alignItems: "center",
+    alignItems: "center"
   },
 
   namePill: {
@@ -797,12 +755,12 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
+    shadowRadius: 4
   },
   nameText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#000",
+    color: "#000"
   },
 
   card: {
@@ -818,67 +776,67 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 6,
     borderWidth: 1,
-    borderColor: "#f1f1f1",
+    borderColor: "#f1f1f1"
   },
 
   sectionHeading: {
     fontSize: 16,
     fontWeight: "700",
     color: "#000",
-    marginBottom: 12,
+    marginBottom: 12
   },
 
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    justifyContent: "space-between",
+    justifyContent: "space-between"
   },
   rowLabel: {
     fontSize: 18,
     color: "#000",
-    fontWeight: "600",
+    fontWeight: "600"
   },
   rowLabelBold: {
     fontSize: 18,
     color: "#000",
-    fontWeight: "700",
+    fontWeight: "700"
   },
   rowSub: {
     marginTop: 6,
     fontSize: 14,
     color: "#9e9e9e",
-    width: 200,
+    width: 200
   },
   chevron: {
     width: 18,
     height: 18,
     tintColor: "#9e9e9e",
-    marginLeft: 12,
+    marginLeft: 12
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#f1f1f1",
+    backgroundColor: "#f1f1f1"
   },
 
   buttonContainer: {
     padding: 15,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
+    borderBottomRightRadius: 10
   },
   button: {
     padding: 12,
     borderRadius: 8,
-    alignItems: 'center'
+    alignItems: "center"
   },
   cancelButton: {
-    backgroundColor: '#2e7d32'
+    backgroundColor: "#2e7d32"
   },
   cancelButtonText: {
-    color: 'white',
-    fontWeight: '500',
+    color: "white",
+    fontWeight: "500",
     fontSize: 16
   },
 
@@ -886,13 +844,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#000",
-    marginBottom: 8,
+    marginBottom: 8
   },
   screenDescription: {
     fontSize: 14,
     color: "#666",
     marginBottom: 16,
-    lineHeight: 20,
+    lineHeight: 20
   },
   textInput: {
     borderWidth: 1,
@@ -901,7 +859,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: "#000",
-    backgroundColor: "#f9f9f9",
+    backgroundColor: "#f9f9f9"
   },
   actionButton: {
     backgroundColor: "#2e7d32",
@@ -910,24 +868,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 24,
     minHeight: 50,
-    justifyContent: "center",
+    justifyContent: "center"
   },
   actionButtonText: {
     color: "white",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "600"
   },
   dangerButton: {
-    backgroundColor: "#e8151b",
+    backgroundColor: "#e8151b"
   },
   statusText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#000",
+    color: "#000"
   },
   statusSubtext: {
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 4
   },
   successCard: {
     backgroundColor: "#E8F5E9",
@@ -935,22 +893,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 24,
     borderLeftWidth: 4,
-    borderLeftColor: "#4CAF50",
+    borderLeftColor: "#4CAF50"
   },
   successText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1B5E20",
+    color: "#1B5E20"
   },
   successSubtext: {
     fontSize: 14,
     color: "#2E7D32",
-    marginTop: 4,
+    marginTop: 4
   },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    justifyContent: "space-between",
-  },
+    justifyContent: "space-between"
+  }
 });

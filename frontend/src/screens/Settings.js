@@ -507,20 +507,6 @@ export default function Settings({
 
                   <Pressable 
                     style={[styles.row, loading && { opacity: 0.5 }]} 
-                    onPress={handleLogout}
-                    disabled={loading}
-                  >
-                    <View>
-                      <Text style={styles.rowLabelBold}>Logout</Text>
-                      <Text style={styles.rowSub}>Log out this one active session.</Text>
-                    </View>
-                    <Image source={ICON_CHEVRON} style={styles.chevron} resizeMode="contain" />
-                  </Pressable>
-
-                  <View style={styles.divider} />
-
-                  <Pressable 
-                    style={[styles.row, loading && { opacity: 0.5 }]} 
                     onPress={handleDeleteAccount}
                     disabled={loading}
                   >
