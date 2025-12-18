@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,27 +10,31 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
-import { 
+import {
   getAuth,
   verifyBeforeUpdateEmail
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
+import {
+  getFirestore,
+  doc,
   setDoc
 } from 'firebase/firestore';
 import { app } from '../config/firebaseConfig';
 
-export default function EditProfileModal({ 
-  visible, 
-  onClose, 
+export default function EditProfileModal({
+  visible,
+  onClose,
   userData,
   onUpdateUser,
   userRole,
-  userDocId   // optional, galing sa Me.js kung meron
+  userDocId // optional
 }) {
+  const isRider = userRole === 'Rider';
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -38,27 +42,70 @@ export default function EditProfileModal({
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isRider = userRole === "Rider";
+  // ✅ Guards to prevent "reset/jump" while typing
+  const [initialized, setInitialized] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
-  // kapag nag-open yung modal, i-load yung current userData
+  // Create a stable "key" for the user (prevents re-init for same user)
+  const userKey = useMemo(() => {
+    return String(userDocId || userData?.uid || userData?.id || userData?.email || '');
+  }, [userDocId, userData?.uid, userData?.id, userData?.email]);
+
+  // When modal opens/closes, reset init flags
   useEffect(() => {
     if (visible) {
-      setFirstName(userData.firstName || '');
-      setLastName(userData.lastName || '');
-      setEmail(userData.email || '');
-      setContactNumber(userData.contactNumber || '');
-      setAddress(userData.address || '');
+      setInitialized(false);
+      setDirty(false);
+    } else {
+      setInitialized(false);
+      setDirty(false);
+      setLoading(false);
     }
-  }, [visible, userData]);
+  }, [visible]);
+
+  // ✅ Initialize fields ONLY ONCE per modal open, and only if user isn't typing
+  useEffect(() => {
+    if (!visible) return;
+    if (initialized) return;
+    if (dirty) return;
+
+    const u = userData || {};
+    const hasAny =
+      !!u.email ||
+      !!u.firstName ||
+      !!u.lastName ||
+      !!u.contactNumber ||
+      !!u.address;
+
+    // If userData is still empty (loading), wait a bit (do not initialize yet)
+    if (!hasAny) return;
+
+    setFirstName(u.firstName || '');
+    setLastName(u.lastName || '');
+    setEmail(u.email || '');
+    setContactNumber(u.contactNumber || '');
+    setAddress(u.address || '');
+
+    setInitialized(true);
+  }, [visible, initialized, dirty, userKey, userData]);
+
+  const markDirty = () => {
+    if (!dirty) setDirty(true);
+  };
+
+  const handleSafeClose = () => {
+    if (loading) return;
+    onClose?.();
+  };
 
   const handleUpdateProfile = async () => {
-    if (!email) {
+    if (!email?.trim()) {
       Alert.alert('Error', 'Email is required');
       return;
     }
 
     if (!isRider) {
-      if (!firstName || !lastName) {
+      if (!firstName?.trim() || !lastName?.trim()) {
         Alert.alert('Error', 'First Name and Last Name are required');
         return;
       }
@@ -71,76 +118,70 @@ export default function EditProfileModal({
       const db = getFirestore(app);
       const user = auth.currentUser;
 
-      if (!user) {
-        throw new Error('No authenticated user');
-      }
+      if (!user) throw new Error('No authenticated user');
 
       const docIdToUse = userDocId || user.uid;
       const userDocRef = doc(db, 'users', docIdToUse);
-      const roleToPersist = userRole || userData.role || 'Rider';
+      const roleToPersist = userRole || userData?.role || 'Rider';
 
+      const nextEmail = email.trim();
       let emailChanged = false;
 
-      // 1) Kung nagbago ang email, send verification link sa NEW email
-      if (email !== user.email) {
-        await verifyBeforeUpdateEmail(user, email);
+      // ✅ Send verification link only if email actually changed
+      if (nextEmail !== (user.email || '')) {
+        await verifyBeforeUpdateEmail(user, nextEmail);
         emailChanged = true;
       }
 
-      // 2) Ihanda yung data na i-sa-save sa Firestore
-      let updateData = {};
+      // ✅ Data to merge into Firestore
+      const updateData = isRider
+        ? {
+            email: nextEmail,
+            contactNumber: contactNumber || '',
+            role: roleToPersist,
+          }
+        : {
+            firstName: firstName || '',
+            lastName: lastName || '',
+            email: nextEmail,
+            contactNumber: contactNumber || '',
+            address: address || '',
+            role: roleToPersist,
+          };
 
-      if (isRider) {
-        updateData = {
-          email,
-          contactNumber,
-          role: roleToPersist,
-        };
-      } else {
-        updateData = {
-          firstName,
-          lastName,
-          email,
-          contactNumber,
-          address,
-          role: roleToPersist,
-        };
-      }
-
-      console.log('Updating with data:', updateData);
-
-      // 3) Save sa Firestore (merge, para hindi mabura ibang fields)
       await setDoc(userDocRef, updateData, { merge: true });
 
-      // 4) I-update local state sa Me.js
+      // ✅ Update local state (Me.js)
       const updatedUserData = {
-        firstName: isRider ? userData.firstName : firstName,
-        lastName: isRider ? userData.lastName : lastName,
-        email,
-        contactNumber,
-        address: isRider ? userData.address : address,
-        profileImage: userData.profileImage,
+        firstName: isRider ? (userData?.firstName || '') : firstName,
+        lastName: isRider ? (userData?.lastName || '') : lastName,
+        email: nextEmail,
+        contactNumber: contactNumber || '',
+        address: isRider ? (userData?.address || '') : address,
+        profileImage: userData?.profileImage,
         role: roleToPersist,
       };
 
-      onUpdateUser(updatedUserData);
+      onUpdateUser?.(updatedUserData);
 
-      const successMessage = emailChanged
-        ? 'We sent a verification link to your NEW email. Please open that email and click the link before using it to log in.'
-        : 'Profile updated successfully';
+      Alert.alert(
+        'Success',
+        emailChanged
+          ? 'We sent a verification link to your NEW email. Please open that email and click the link before using it to log in.'
+          : 'Profile updated successfully'
+      );
 
-      Alert.alert('Success', successMessage);
-      onClose();
+      onClose?.();
     } catch (error) {
       console.error('Profile update error:', error);
 
-      if (error.code === 'auth/requires-recent-login') {
+      if (error?.code === 'auth/requires-recent-login') {
         Alert.alert(
           'Security check needed',
           'For your security, please log out, then log in again with your current email and password, and try changing your email once more.'
         );
       } else {
-        Alert.alert('Error', error.message);
+        Alert.alert('Error', error?.message || 'Failed to update profile');
       }
     } finally {
       setLoading(false);
@@ -150,170 +191,190 @@ export default function EditProfileModal({
   return (
     <Modal
       animationType="slide"
-      transparent={true}
+      transparent
       visible={visible}
-      onRequestClose={onClose}
+      onRequestClose={handleSafeClose}
+      statusBarTranslucent
     >
-      {/* Dark background overlay */}
-      <View style={styles.modalContainer}>
-        {/* Ito na yung nag-aadjust pag may keyboard */}
-        <KeyboardAvoidingView
-          style={styles.avoidView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-        >
-          <View style={styles.modalContent}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.modalTitle}>Edit Profile</Text>
-            </View>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.modalContainer}>
+          <KeyboardAvoidingView
+            style={styles.avoidView}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+          >
+            <View style={styles.modalContent}>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={styles.modalTitle}>Edit Profile</Text>
+              </View>
 
-            {/* Scrollable form para di matabunan fields at buttons */}
-            <ScrollView
-              style={styles.formScroll}
-              contentContainerStyle={styles.formContainer}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {isRider ? (
-                <>
-                  {/* Rider: Email + Contact only */}
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>Email</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Email"
-                      value={email}
-                      onChangeText={setEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                  </View>
-
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>Contact Number</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Contact Number"
-                      value={contactNumber}
-                      onChangeText={setContactNumber}
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-                </>
-              ) : (
-                <>
-                  {/* Admin: full fields */}
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>First Name</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="First Name"
-                      value={firstName}
-                      onChangeText={setFirstName}
-                    />
-                  </View>
-
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>Last Name</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Last Name"
-                      value={lastName}
-                      onChangeText={setLastName}
-                    />
-                  </View>
-
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>Email</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Email"
-                      value={email}
-                      onChangeText={setEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                  </View>
-
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>Contact Number</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Contact Number"
-                      value={contactNumber}
-                      onChangeText={setContactNumber}
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-
-                  {/* Address */}
-                  <View style={styles.fieldWrapper}>
-                    <Text style={styles.label}>Address</Text>
-                    <TextInput
-                      style={[styles.input, styles.multilineInput]}
-                      placeholder="Address"
-                      value={address}
-                      onChangeText={setAddress}
-                      multiline
-                    />
-                  </View>
-                </>
-              )}
-
-              {/* Extra spacer para may pagitan sa buttons kapag naka-keyboard */}
-              <View style={{ height: 12 }} />
-            </ScrollView>
-
-            {/* Buttons – laging visible, aangat kasama ng card */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={onClose}
-                disabled={loading}
+              {/* ✅ Scroll area (no hard maxHeight) */}
+              <ScrollView
+                style={styles.formScroll}
+                contentContainerStyle={styles.formContainer}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
+                {isRider ? (
+                  <>
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>Email</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        value={email}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setEmail(t);
+                        }}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                    </View>
 
-              <TouchableOpacity
-                style={[styles.button, styles.saveButton]}
-                onPress={handleUpdateProfile}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>Contact Number</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Contact Number"
+                        value={contactNumber}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setContactNumber(t);
+                        }}
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </>
                 ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
+                  <>
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>First Name</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="First Name"
+                        value={firstName}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setFirstName(t);
+                        }}
+                      />
+                    </View>
+
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>Last Name</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Last Name"
+                        value={lastName}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setLastName(t);
+                        }}
+                      />
+                    </View>
+
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>Email</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        value={email}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setEmail(t);
+                        }}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                    </View>
+
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>Contact Number</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Contact Number"
+                        value={contactNumber}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setContactNumber(t);
+                        }}
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.label}>Address</Text>
+                      <TextInput
+                        style={[styles.input, styles.multilineInput]}
+                        placeholder="Address"
+                        value={address}
+                        onChangeText={(t) => {
+                          markDirty();
+                          setAddress(t);
+                        }}
+                        multiline
+                      />
+                    </View>
+                  </>
                 )}
-              </TouchableOpacity>
+
+                {/* ✅ extra padding so last field isn’t cramped near buttons */}
+                <View style={{ height: 18 }} />
+              </ScrollView>
+
+              {/* Buttons */}
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={handleSafeClose}
+                  disabled={loading}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.button, styles.saveButton]}
+                  onPress={handleUpdateProfile}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
+          </KeyboardAvoidingView>
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  // dark overlay
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
   },
-  // center yung card, pero nag-aadjust pag may keyboard
   avoidView: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   modalContent: {
-    width: '90%',
-    maxWidth: 400,
-    maxHeight: '85%',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    height: '85%',
     backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
   },
+
   header: {
     backgroundColor: '#2e7d32',
     paddingHorizontal: 16,
@@ -323,16 +384,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 4,
   },
+
   formScroll: {
-    maxHeight: 400, // para scrollable yung fields kung maliit screen
+    flex: 1,
   },
   formContainer: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 12, // may konting space bago buttons
+    paddingBottom: 10,
   },
+
   fieldWrapper: {
     marginBottom: 18,
   },
@@ -355,6 +417,7 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
+
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',

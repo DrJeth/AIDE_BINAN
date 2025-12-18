@@ -1,17 +1,15 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   Modal,
-  ScrollView
+  ScrollView,
+  Platform
 } from 'react-native';
 
-export default function TermsService({ 
-  visible, 
-  onClose 
-}) {
+export default function TermsService({ visible, onClose }) {
   return (
     <Modal
       animationType="slide"
@@ -22,8 +20,16 @@ export default function TermsService({
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Terms of Service</Text>
-          
-          <ScrollView style={styles.scrollContent}>
+
+          {/* ✅ FIX: ScrollView must flex, and content needs bottom padding */}
+          <ScrollView
+            style={styles.scrollContent}
+            contentContainerStyle={styles.scrollContentContainer}
+            showsVerticalScrollIndicator={true}
+            nestedScrollEnabled={true} // ✅ helps on Android
+            keyboardShouldPersistTaps="handled"
+            contentInsetAdjustmentBehavior="automatic" // ✅ iOS
+          >
             <Text style={styles.paragraph}>
               {`This summary is provided for convenience. Please review the Terms of Service below for important information and legal conditions that apply to your use of the A.I.D.E. Biñan (AI Detection and Enforcement for Electric Bicycle Compliance) application. The system is intended to assist the City of Biñan in monitoring, detecting, and enforcing e-bike regulations using artificial intelligence to promote public safety and responsible riding.`}
             </Text>
@@ -75,10 +81,10 @@ Phone: (049) XXX-XXXX
 Address: City Hall of Biñan, Laguna`}
             </Text>
           </ScrollView>
-          
+
           <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.button, styles.cancelButton]} 
+            <TouchableOpacity
+              style={[styles.button, styles.cancelButton]}
               onPress={onClose}
             >
               <Text style={styles.cancelButtonText}>Close</Text>
@@ -97,29 +103,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)'
   },
+
+  // ✅ FIX: use flex + maxHeight so children can size properly
   modalContent: {
     width: '90%',
+    maxHeight: '90%',
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 20,
-    maxHeight: '90%'
+    flex: 1
   },
+
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 12,
     color: '#2e7d32',
     textAlign: 'center'
   },
+
+  // ✅ FIX: ScrollView must expand to take available height
   scrollContent: {
-    marginBottom: 20
+    flex: 1
   },
+
+  // ✅ FIX: add bottom padding so last text is not blocked by button
+  scrollContentContainer: {
+    paddingBottom: 30
+  },
+
   paragraph: {
     fontSize: 14,
     marginBottom: 15,
     lineHeight: 20,
     color: '#333'
   },
+
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -127,22 +146,24 @@ const styles = StyleSheet.create({
     marginTop: 15,
     marginBottom: 10
   },
+
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%'
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 6 : 0
   },
+
   button: {
-    flex: 1,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center'
   },
+
   cancelButton: {
     backgroundColor: '#2e7d32'
   },
+
   cancelButtonText: {
     color: 'white',
-    fontWeight: '500'
+    fontWeight: '600'
   }
 });

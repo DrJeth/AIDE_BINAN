@@ -23,8 +23,10 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, app } from '../config/firebaseConfig';
 import { Linking } from 'react-native';
 
+
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BOTTOM_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 68;
+
 
 const COLORS = {
   PRIMARY_GREEN: '#2E7D32',
@@ -35,6 +37,8 @@ const COLORS = {
   BOTTOM_BAR_GREEN: '#2E7D32'
 };
 
+
+// (Optional) — you used in admin modal. Keep.
 const EBIKE_CATEGORIES = [
   { label: 'Category L1 (e-Moped 2w)', value: 'L1' },
   { label: 'Category L2 (e-Moped 3w)', value: 'L2' },
@@ -49,27 +53,124 @@ const EBIKE_CATEGORIES = [
   { label: 'Category N3 (e-truck)', value: 'N3' }
 ];
 
+
 const formatDate = (dateValue) => {
   if (!dateValue) return 'N/A';
   try {
     const date = new Date(dateValue?.toDate?.() || dateValue);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   } catch (e) {
     return 'Invalid Date';
   }
 };
 
-const getRegistrationStatus = (rider) => {
-  if (!rider?.renewalDate) return null;
-  
+
+const normalizePlate = (v = '') =>
+  v
+    .toString()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/-/g, '')
+    .trim();
+
+
+const getEbikeStatus = (ebike, userStatus) => {
+  return ebike?.status || userStatus || 'Pending';
+};
+
+
+const computeOverallUserStatus = (ebikes = []) => {
+  const statuses = ebikes.map(e => e?.status).filter(Boolean);
+  if (statuses.includes('Pending')) return 'Pending';
+  if (statuses.length > 0 && statuses.every(s => s === 'Rejected')) return 'Rejected';
+  return 'Verified';
+};
+
+
+// ✅ SAME normalize logic as RiderScreen (supports multi-ebike + legacy)
+const normalizeUserEbikes = (userData) => {
+  if (Array.isArray(userData?.ebikes) && userData.ebikes.length > 0) {
+    return userData.ebikes.map((e, idx) => ({
+      id: e?.id || String(idx),
+      ebikeBrand: e?.ebikeBrand || '',
+      ebikeModel: e?.ebikeModel || '',
+      ebikeColor: e?.ebikeColor || '',
+      chassisMotorNumber: e?.chassisMotorNumber || '',
+      branch: e?.branch || '',
+      plateNumber: e?.plateNumber || '',
+      hasPlate: typeof e?.hasPlate === 'boolean' ? e.hasPlate : !!e?.plateNumber,
+
+
+      status: e?.status || userData.status || 'Pending',
+      ebikeCategorySelected: e?.ebikeCategorySelected || '',
+      registeredDate: e?.registeredDate || null,
+      renewalDate: e?.renewalDate || null,
+      registrationStatus: e?.registrationStatus || null,
+      verifiedAt: e?.verifiedAt || null,
+      rejectedAt: e?.rejectedAt || null,
+      rejectedBy: e?.rejectedBy || null,
+
+
+      adminVerificationDocs: e?.adminVerificationDocs || null,
+      transactionHistory: Array.isArray(e?.transactionHistory) ? e.transactionHistory : [],
+
+
+      // legacy docs (if any)
+      adminVerificationImages: Array.isArray(e?.adminVerificationImages) ? e.adminVerificationImages : [],
+
+
+      paymentDetails: e?.paymentDetails || null,
+      createdAt: e?.createdAt || null,
+    }));
+  }
+
+
+  // legacy single ebike
+  return [{
+    id: 'legacy',
+    ebikeBrand: userData?.ebikeBrand || '',
+    ebikeModel: userData?.ebikeModel || '',
+    ebikeColor: userData?.ebikeColor || '',
+    chassisMotorNumber: userData?.chassisMotorNumber || userData?.chassisNumber || '',
+    branch: userData?.branch || '',
+    plateNumber: userData?.plateNumber || '',
+    hasPlate: !!userData?.plateNumber,
+
+
+    status: userData?.status || 'Pending',
+    ebikeCategorySelected: userData?.ebikeCategorySelected || '',
+    registeredDate: userData?.registeredDate || null,
+    renewalDate: userData?.renewalDate || null,
+    registrationStatus: userData?.registrationStatus || null,
+    verifiedAt: userData?.verifiedAt || null,
+    rejectedAt: userData?.rejectedAt || null,
+    rejectedBy: userData?.rejectedBy || null,
+
+
+    adminVerificationDocs: userData?.adminVerificationDocs || null,
+    transactionHistory: Array.isArray(userData?.transactionHistory) ? userData.transactionHistory : [],
+    adminVerificationImages: Array.isArray(userData?.adminVerificationImages) ? userData.adminVerificationImages : [],
+
+
+    paymentDetails: userData?.paymentDetails || null,
+    createdAt: userData?.createdAt || null,
+  }];
+};
+
+
+const getRegistrationStatusFromEbike = (ebike) => {
+  if (!ebike?.renewalDate) return null;
+
+
   const today = new Date();
-  const renewalDate = new Date(rider.renewalDate?.toDate?.() || rider.renewalDate);
+  const renewalDate = new Date(ebike.renewalDate?.toDate?.() || ebike.renewalDate);
   const daysUntilExpiry = Math.floor((renewalDate - today) / (1000 * 60 * 60 * 24));
-  
+
+
   if (daysUntilExpiry < 0) {
     return { status: 'Expired', daysLeft: 0, color: '#F44336' };
   } else if (daysUntilExpiry <= 30) {
@@ -79,11 +180,13 @@ const getRegistrationStatus = (rider) => {
   }
 };
 
+
 const getCategoryLabel = (categoryValue) => {
   if (!categoryValue) return 'N/A';
   const category = EBIKE_CATEGORIES.find(c => c.value === categoryValue);
   return category ? category.label : categoryValue;
 };
+
 
 // Google Cloud Vision API - AUTOMATIC PLATE DETECTION
 const detectPlateFromImage = async (imageUri) => {
@@ -91,104 +194,89 @@ const detectPlateFromImage = async (imageUri) => {
     console.log('🔍 Starting Cloud Vision OCR...');
     const API_KEY = 'AIzaSyDzd_KY3Lb1_U8QjkonSQsT9NXoyB6mulw';
 
-    // Read image as base64
+
     console.log('📖 Reading image file...');
     const base64 = await FileSystem.readAsStringAsync(imageUri, {
       encoding: FileSystem.EncodingType.Base64
     });
     console.log('✅ Image read, size:', base64.length, 'bytes');
 
+
     console.log('📤 Sending to Cloud Vision API...');
     const requestBody = {
       requests: [
         {
-          image: {
-            content: base64
-          },
-          features: [
-            {
-              type: 'TEXT_DETECTION'
-            }
-          ]
+          image: { content: base64 },
+          features: [{ type: 'TEXT_DETECTION' }]
         }
       ]
     };
-    console.log('📨 Request payload size:', JSON.stringify(requestBody).length);
+
 
     const response = await fetch(
       `https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
       }
     );
 
+
     console.log('📥 Response status:', response.status);
     const responseText = await response.text();
-    console.log('📥 Response body:', responseText.substring(0, 500));
+
 
     let result;
     try {
       result = JSON.parse(responseText);
     } catch (parseError) {
       console.error('❌ JSON Parse error:', parseError.message);
-      console.error('Response was:', responseText);
       return null;
     }
+
 
     if (result.error) {
       console.error('❌ Vision API error:', result.error.code, result.error.message);
-      console.error('Full error:', result.error);
       return null;
     }
 
-    if (!result.responses || !result.responses[0]) {
-      console.error('❌ No responses from API');
-      return null;
-    }
+
+    if (!result.responses || !result.responses[0]) return null;
+
 
     const response0 = result.responses[0];
     let fullText = '';
 
-    // Try fullTextAnnotation first (more reliable)
+
     if (response0.fullTextAnnotation && response0.fullTextAnnotation.text) {
       fullText = response0.fullTextAnnotation.text;
-      console.log('✅ Got text from fullTextAnnotation');
-    } 
-    // Fallback to textAnnotations
-    else if (response0.textAnnotations && response0.textAnnotations.length > 0) {
+    } else if (response0.textAnnotations && response0.textAnnotations.length > 0) {
       fullText = response0.textAnnotations[0].description;
-      console.log('✅ Got text from textAnnotations');
     }
+
 
     console.log('📝 Detected text:', fullText);
-    if (!fullText || fullText.trim() === '') {
-      console.log('❌ No text detected in image');
-      return null;
-    }
+    if (!fullText || fullText.trim() === '') return null;
 
-    // Extract plate number - Philippine plate patterns
-    // Examples: 123YBC, J1233, ABC123, J 1233, ABC-123, AB1234
+
     const platePatterns = [
-      /\d{1,4}[A-Z]{1,3}/gi,           // 123YBC or 1234ABC (numbers first)
-      /[A-Z]{1,3}\s*-?\s*\d{1,4}/gi,  // ABC-123 or ABC 123 (letters first)
-      /[A-Z]{1,3}\d{1,4}/gi           // ABC123
+      /\d{1,4}[A-Z]{1,3}/gi,
+      /[A-Z]{1,3}\s*-?\s*\d{1,4}/gi,
+      /[A-Z]{1,3}\d{1,4}/gi
     ];
+
 
     for (const pattern of platePatterns) {
       const matches = fullText.match(pattern);
       if (matches && matches.length > 0) {
         let plateNumber = matches[0]
-          .replace(/\s/g, '')  // Remove spaces
-          .replace(/-/g, '')   // Remove dashes
+          .replace(/\s/g, '')
+          .replace(/-/g, '')
           .toUpperCase()
           .trim();
 
-        // Validate plate format
-        // Accept: 123YBC, YABCD, etc.
+
         if (/^[A-Z0-9]{4,7}$/.test(plateNumber)) {
           console.log('✅ Extracted plate:', plateNumber);
           return plateNumber;
@@ -196,14 +284,14 @@ const detectPlateFromImage = async (imageUri) => {
       }
     }
 
-    console.log('❌ No valid plate pattern found in text');
+
     return null;
   } catch (error) {
     console.error('❌ Detection error:', error.message);
-    console.error('Stack:', error);
     return null;
   }
 };
+
 
 export default function HomeAdmin({ navigation }) {
   const [plateNumber, setPlateNumber] = useState('');
@@ -217,28 +305,29 @@ export default function HomeAdmin({ navigation }) {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [userFirstName, setUserFirstName] = useState('Admin');
 
+
   // Fetch current user data on component mount
   useEffect(() => {
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          // Fetch user data from Firestore
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
+
 
           if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
             setUserFirstName(userData.firstName || 'Admin');
           } else {
-            // Fallback: try to fetch by email
             const usersRef = collection(db, 'users');
             const q = query(usersRef, where('email', '==', user.email));
             const querySnapshot = await getDocs(q);
 
+
             if (!querySnapshot.empty) {
-              const userDoc = querySnapshot.docs[0].data();
-              setUserFirstName(userDoc.firstName || 'Admin');
+              const userDocData = querySnapshot.docs[0].data();
+              setUserFirstName(userDocData.firstName || 'Admin');
             }
           }
         } catch (error) {
@@ -247,8 +336,10 @@ export default function HomeAdmin({ navigation }) {
       }
     });
 
+
     return () => unsubscribe();
   }, []);
+
 
   const handleQuestionMarkPress = () => {
     Alert.alert(
@@ -257,77 +348,158 @@ export default function HomeAdmin({ navigation }) {
     );
   };
 
-  const searchEbike = async (plate) => {
-    if (!plate || plate.trim() === '') {
+
+  // ✅ Rider uploaded docs (riderRegistrations/{uid}/images)
+  const fetchRiderDocuments = async (userId) => {
+    try {
+      const allDocumentsQuery = query(
+        collection(db, 'riderRegistrations', userId, 'images')
+      );
+      const docsSnapshot = await getDocs(allDocumentsQuery);
+
+
+      return docsSnapshot.docs.map(docSnap => {
+        const docData = docSnap.data();
+        const imageUrl = docData.url || docData.imageUrl || docData.downloadUrl || docData.image;
+        return {
+          id: docSnap.id,
+          type: docData.type,
+          url: imageUrl,
+          timestamp: docData.timestamp,
+          ...docData
+        };
+      });
+    } catch (e) {
+      console.error('❌ Error fetching rider documents:', e?.message || e);
+      return [];
+    }
+  };
+
+
+  // ✅ Open details with matched ebike + correct status + full ebike fields
+  const openDetails = async ({ userId, userData, matchedEbike = null }) => {
+    const riderDocuments = await fetchRiderDocuments(userId);
+
+
+    const ebikes = normalizeUserEbikes(userData);
+
+
+    let ebike = matchedEbike;
+    if (!ebike && userData?.plateNumber) {
+      const p = normalizePlate(userData.plateNumber);
+      ebike = ebikes.find(e => normalizePlate(e?.plateNumber) === p) || null;
+    }
+
+
+    const ebikeStatus = getEbikeStatus(ebike, userData?.status);
+
+
+    setSelectedEbike({
+      id: userId,
+      userId,
+
+
+      firstName: userData?.firstName || '',
+      lastName: userData?.lastName || '',
+      contactNumber: userData?.contactNumber || 'N/A',
+      email: userData?.email || 'N/A',
+      address: userData?.address || 'N/A',
+      birthday: userData?.birthday || 'N/A',
+
+
+      // ✅ correct status for the matched ebike
+      status: ebikeStatus,
+      userStatus: userData?.status || 'Pending',
+
+
+      // rider uploaded documents
+      documents: riderDocuments,
+
+
+      // ✅ matched ebike (this is now the main source of ebike info)
+      matchedEbike: ebike
+    });
+
+
+    setDetailsModalVisible(true);
+    setPlateNumber('');
+  };
+
+
+  // ✅ SEARCH: supports users.plateNumber, users.plateNumbers[], AND scanning users.ebikes[]
+  const searchEbike = async (plateRaw) => {
+    const plate = normalizePlate(plateRaw);
+
+
+    if (!plate) {
       Alert.alert('Error', 'Please enter a plate number');
       return;
     }
 
+
     setSearchLoading(true);
     try {
-      console.log('🔎 Searching for plate:', plate);
-      const q = query(
-        collection(db, 'users'),
-        where('plateNumber', '==', plate.toUpperCase())
-      );
-      const querySnapshot = await getDocs(q);
+      console.log('🔎 Searching plate:', plate);
 
-      if (querySnapshot.empty) {
-        Alert.alert('Not Found', `No e-bike found with plate: ${plate}`);
-        setSearchLoading(false);
+
+      // 1) users.plateNumber
+      const q1 = query(collection(db, 'users'), where('plateNumber', '==', plate));
+      const s1 = await getDocs(q1);
+      if (!s1.empty) {
+        const userDoc = s1.docs[0];
+        const userData = userDoc.data();
+
+
+        const ebikes = normalizeUserEbikes(userData);
+        const matched = ebikes.find(e => normalizePlate(e?.plateNumber) === plate) || null;
+
+
+        await openDetails({ userId: userDoc.id, userData, matchedEbike: matched });
         return;
       }
 
-      const userDoc = querySnapshot.docs[0];
-      const userData = userDoc.data();
 
-      let riderDocuments = [];
-      try {
-        const allDocumentsQuery = query(
-          collection(db, 'riderRegistrations', userDoc.id, 'images')
-        );
-        const docsSnapshot = await getDocs(allDocumentsQuery);
-        console.log('📸 Raw documents snapshot size:', docsSnapshot.size);
+      // 2) users.plateNumbers array-contains (if used)
+      const q2 = query(collection(db, 'users'), where('plateNumbers', 'array-contains', plate));
+      const s2 = await getDocs(q2);
+      if (!s2.empty) {
+        const userDoc = s2.docs[0];
+        const userData = userDoc.data();
 
-        riderDocuments = docsSnapshot.docs.map(docSnap => {
-          const docData = docSnap.data();
-          const imageUrl = docData.url || docData.imageUrl || docData.downloadUrl || docData.image;
 
-          console.log('📄 Document:', {
-            id: docSnap.id,
-            type: docData.type,
-            url: imageUrl ? 'URL exists' : 'NO URL',
-            allKeys: Object.keys(docData)
-          });
+        const ebikes = normalizeUserEbikes(userData);
+        const matched = ebikes.find(e => normalizePlate(e?.plateNumber) === plate) || null;
 
-          return {
-            id: docSnap.id,
-            type: docData.type,
-            url: imageUrl,
-            timestamp: docData.timestamp,
-            ...docData
-          };
-        });
 
-        console.log('📄 Total documents found:', riderDocuments.length);
-        if (riderDocuments.length > 0) {
-          console.log('📄 First document:', riderDocuments[0]);
-        }
-      } catch (docErr) {
-        console.error('❌ Error fetching documents:', docErr.message);
-        riderDocuments = [];
+        await openDetails({ userId: userDoc.id, userData, matchedEbike: matched });
+        return;
       }
 
-      const ebikeData = {
-        id: userDoc.id,
-        ...userData,
-        documents: riderDocuments
-      };
 
-      console.log('✅ E-bike found:', ebikeData.firstName);
-      setSelectedEbike(ebikeData);
-      setDetailsModalVisible(true);
-      setPlateNumber('');
+      // 3) fallback scan: role Rider -> find inside ebikes[]
+      const q3 = query(collection(db, 'users'), where('role', '==', 'Rider'));
+      const s3 = await getDocs(q3);
+
+
+      let found = null;
+      for (const userDoc of s3.docs) {
+        const userData = userDoc.data();
+        const ebikes = normalizeUserEbikes(userData);
+        const matched = ebikes.find(e => normalizePlate(e?.plateNumber) === plate);
+        if (matched) {
+          found = { userId: userDoc.id, userData, matchedEbike: matched };
+          break;
+        }
+      }
+
+
+      if (found) {
+        await openDetails(found);
+        return;
+      }
+
+
+      Alert.alert('Not Found', `No e-bike found with plate: ${plate}`);
     } catch (error) {
       console.error('Search error:', error);
       Alert.alert('Error', `Could not search: ${error.message}`);
@@ -335,6 +507,7 @@ export default function HomeAdmin({ navigation }) {
       setSearchLoading(false);
     }
   };
+
 
   const capturePhoto = async () => {
     try {
@@ -344,21 +517,25 @@ export default function HomeAdmin({ navigation }) {
         return;
       }
 
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8
       });
 
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
         setCapturedImage(imageUri);
         setImageModalVisible(true);
 
+
         console.log('🎥 Photo captured, auto-detecting plate...');
         setDetectionLoading(true);
         const detectedPlate = await detectPlateFromImage(imageUri);
         setDetectionLoading(false);
+
 
         if (detectedPlate) {
           console.log('✨ Plate detected! Searching...');
@@ -368,7 +545,6 @@ export default function HomeAdmin({ navigation }) {
             searchEbike(detectedPlate);
           }, 500);
         } else {
-          console.log('⚠️ Detection failed');
           Alert.alert('Detection Failed', 'Could not read plate. Try another photo.');
         }
       }
@@ -378,6 +554,7 @@ export default function HomeAdmin({ navigation }) {
     }
   };
 
+
   const pickPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -386,21 +563,25 @@ export default function HomeAdmin({ navigation }) {
         return;
       }
 
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8
       });
 
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
         setCapturedImage(imageUri);
         setImageModalVisible(true);
 
+
         console.log('📸 Photo selected, auto-detecting plate...');
         setDetectionLoading(true);
         const detectedPlate = await detectPlateFromImage(imageUri);
         setDetectionLoading(false);
+
 
         if (detectedPlate) {
           console.log('✨ Plate detected! Searching...');
@@ -410,7 +591,6 @@ export default function HomeAdmin({ navigation }) {
             searchEbike(detectedPlate);
           }, 500);
         } else {
-          console.log('⚠️ Detection failed');
           Alert.alert('Detection Failed', 'Could not read plate. Try another photo.');
         }
       }
@@ -420,277 +600,323 @@ export default function HomeAdmin({ navigation }) {
     }
   };
 
-  const renderDetailsModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={detailsModalVisible}
-      onRequestClose={() => setDetailsModalVisible(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <TouchableOpacity 
-            style={styles.modalCloseButton} 
-            onPress={() => setDetailsModalVisible(false)}
-          >
-            <Feather name="x" size={28} color={COLORS.TEXT_DARK} />
-          </TouchableOpacity>
 
-          <ScrollView contentContainerStyle={styles.modalScroll}>
-            <Text style={styles.modalTitle}>E-Bike Details</Text>
+  const renderDetailsModal = () => {
+    const eb = selectedEbike?.matchedEbike || null; // ✅ MAIN SOURCE OF EBIKE INFO
+    const regStatus = eb ? getRegistrationStatusFromEbike(eb) : null;
 
-            {selectedEbike && (
-              <>
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>Rider Information</Text>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Name:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.firstName} {selectedEbike.lastName}
-                    </Text>
-                  </View>
+    // ✅ Admin verification images can be inside matched ebike (legacy)
+    const adminVerificationImages = Array.isArray(eb?.adminVerificationImages)
+      ? eb.adminVerificationImages
+      : [];
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Contact:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.contactNumber || 'N/A'}
-                    </Text>
-                  </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Email:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.email || 'N/A'}
-                    </Text>
-                  </View>
+    // ✅ Admin verification docs (new)
+    const adminReceipt = Array.isArray(eb?.adminVerificationDocs?.receipt)
+      ? eb.adminVerificationDocs.receipt
+      : [];
+    const adminEbikePhotos = Array.isArray(eb?.adminVerificationDocs?.ebikePhotos)
+      ? eb.adminVerificationDocs.ebikePhotos
+      : [];
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Address:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.address || 'N/A'}
-                    </Text>
-                  </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Birthday:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.birthday || 'N/A'}
-                    </Text>
-                  </View>
-                </View>
+    const combinedAdminDocs = [
+      ...adminReceipt.map(url => ({ url, type: 'admin_receipt' })),
+      ...adminEbikePhotos.map(url => ({ url, type: 'admin_ebike' })),
+      ...adminVerificationImages.map(url => ({ url, type: 'verification' })),
+    ].filter(x => !!x.url);
 
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>E-Bike Information</Text>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Plate:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.plateNumber || 'N/A'}
-                    </Text>
-                  </View>
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={detailsModalVisible}
+        onRequestClose={() => setDetailsModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setDetailsModalVisible(false)}
+            >
+              <Feather name="x" size={28} color={COLORS.TEXT_DARK} />
+            </TouchableOpacity>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Brand:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.ebikeBrand || 'N/A'}
-                    </Text>
-                  </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Model:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.ebikeModel || 'N/A'}
-                    </Text>
-                  </View>
+            <ScrollView contentContainerStyle={styles.modalScroll}>
+              <Text style={styles.modalTitle}>E-Bike Details</Text>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Color:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.ebikeColor || 'N/A'}
-                    </Text>
-                  </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Chassis/Motor:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.chassisMotorNumber || 'N/A'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Branch:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedEbike.branch || 'N/A'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>Verification Status</Text>
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Status:</Text>
-                    <Text style={[
-                      styles.detailValue,
-                      { 
-                        color: selectedEbike.status === 'Verified' 
-                          ? '#4CAF50' 
-                          : selectedEbike.status === 'Rejected' 
-                            ? '#F44336' 
-                            : '#FF9800',
-                        fontWeight: '600'
-                      }
-                    ]}>
-                      {selectedEbike.status || 'Pending'}
-                    </Text>
-                  </View>
-                </View>
-
-                {selectedEbike.status === 'Verified' && (
+              {selectedEbike && (
+                <>
                   <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>Registration Information</Text>
+                    <Text style={styles.detailSectionTitle}>Rider Information</Text>
+
 
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>E-Bike Category:</Text>
+                      <Text style={styles.detailLabel}>Name:</Text>
                       <Text style={styles.detailValue}>
-                        {getCategoryLabel(selectedEbike.ebikeCategorySelected)}
+                        {selectedEbike.firstName} {selectedEbike.lastName}
                       </Text>
                     </View>
 
+
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Registered:</Text>
+                      <Text style={styles.detailLabel}>Contact:</Text>
                       <Text style={styles.detailValue}>
-                        {formatDate(selectedEbike.registeredDate)}
+                        {selectedEbike.contactNumber || 'N/A'}
                       </Text>
                     </View>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Email:</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedEbike.email || 'N/A'}
+                      </Text>
+                    </View>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Address:</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedEbike.address || 'N/A'}
+                      </Text>
+                    </View>
+
+
+                    <View style={[styles.detailRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                      <Text style={styles.detailLabel}>Birthday:</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedEbike.birthday || 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+
+
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>E-Bike Information</Text>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Plate:</Text>
+                      <Text style={styles.detailValue}>
+                        {eb?.plateNumber ? normalizePlate(eb.plateNumber) : 'N/A'}
+                      </Text>
+                    </View>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Brand:</Text>
+                      <Text style={styles.detailValue}>
+                        {eb?.ebikeBrand || 'N/A'}
+                      </Text>
+                    </View>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Model:</Text>
+                      <Text style={styles.detailValue}>
+                        {eb?.ebikeModel || 'N/A'}
+                      </Text>
+                    </View>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Color:</Text>
+                      <Text style={styles.detailValue}>
+                        {eb?.ebikeColor || 'N/A'}
+                      </Text>
+                    </View>
+
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Chassis/Motor:</Text>
+                      <Text style={styles.detailValue}>
+                        {eb?.chassisMotorNumber || 'N/A'}
+                      </Text>
+                    </View>
+
 
                     <View style={[styles.detailRow, { paddingBottom: 0, borderBottomWidth: 0 }]}>
-                      <Text style={styles.detailLabel}>Renewal Date:</Text>
+                      <Text style={styles.detailLabel}>Branch:</Text>
+                      <Text style={styles.detailValue}>
+                        {eb?.branch || 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+
+
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Verification Status</Text>
+
+
+                    <View style={[styles.detailRow, { paddingBottom: 0, borderBottomWidth: 0 }]}>
+                      <Text style={styles.detailLabel}>Status:</Text>
                       <Text style={[
                         styles.detailValue,
-                        getRegistrationStatus(selectedEbike) && {
-                          color: getRegistrationStatus(selectedEbike).color,
+                        {
+                          color: selectedEbike.status === 'Verified'
+                            ? '#4CAF50'
+                            : selectedEbike.status === 'Rejected'
+                              ? '#F44336'
+                              : '#FF9800',
                           fontWeight: '600'
                         }
                       ]}>
-                        {formatDate(selectedEbike.renewalDate)}
+                        {selectedEbike.status || 'Pending'}
                       </Text>
                     </View>
+                  </View>
 
-                    {getRegistrationStatus(selectedEbike) && (
-                      <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
-                        <Text style={styles.detailLabel}>Status:</Text>
+
+                  {selectedEbike.status === 'Verified' && eb && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Registration Information</Text>
+
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>E-Bike Category:</Text>
+                        <Text style={styles.detailValue}>
+                          {getCategoryLabel(eb.ebikeCategorySelected)}
+                        </Text>
+                      </View>
+
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Registered:</Text>
+                        <Text style={styles.detailValue}>
+                          {formatDate(eb.registeredDate)}
+                        </Text>
+                      </View>
+
+
+                      <View style={[styles.detailRow, { paddingBottom: 0, borderBottomWidth: 0 }]}>
+                        <Text style={styles.detailLabel}>Renewal Date:</Text>
                         <Text style={[
                           styles.detailValue,
-                          {
-                            color: getRegistrationStatus(selectedEbike).color,
-                            fontWeight: '600'
-                          }
+                          regStatus && { color: regStatus.color, fontWeight: '600' }
                         ]}>
-                          {getRegistrationStatus(selectedEbike).status}
-                          {getRegistrationStatus(selectedEbike).status !== 'Expired' && 
-                            ` (${getRegistrationStatus(selectedEbike).daysLeft} days)`
-                          }
+                          {formatDate(eb.renewalDate)}
                         </Text>
                       </View>
-                    )}
 
-                    {selectedEbike.paymentDetails && (
-                      <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
-                        <Text style={styles.detailLabel}>Payment:</Text>
-                        <Text style={styles.detailValue}>
-                          ₱{selectedEbike.paymentDetails.amount?.toFixed(2) || '0.00'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
 
-                {selectedEbike.documents && selectedEbike.documents.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>
-                      📄 Documents ({selectedEbike.documents.length})
-                    </Text>
+                      {regStatus && (
+                        <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                          <Text style={styles.detailLabel}>Status:</Text>
+                          <Text style={[
+                            styles.detailValue,
+                            { color: regStatus.color, fontWeight: '600' }
+                          ]}>
+                            {regStatus.status}
+                            {regStatus.status !== 'Expired' ? ` (${regStatus.daysLeft} days)` : ''}
+                          </Text>
+                        </View>
+                      )}
 
-                    <ScrollView 
-                      horizontal 
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.documentsScroll}
-                    >
-                      {selectedEbike.documents.map((doc, index) => (
-                        <TouchableOpacity
-                          key={index}
-                          onPress={() => {
-                            if (doc.url) {
-                              setSelectedDocument(doc);
-                              setDocumentFullScreenVisible(true);
-                            }
-                          }}
-                          style={styles.documentThumbnail}
-                        >
-                          {doc.url ? (
-                            <>
-                              <Image
-                                source={{ uri: doc.url }}
-                                style={styles.documentThumb}
-                              />
-                              <View style={styles.documentTypeLabel}>
-                                <Text style={styles.documentTypeText}>
-                                  {doc.type === 'original' ? '📝' : '✅'}
-                                </Text>
+
+                      {eb.paymentDetails && (
+                        <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                          <Text style={styles.detailLabel}>Payment:</Text>
+                          <Text style={styles.detailValue}>
+                            ₱{Number(eb.paymentDetails.amount || 0).toFixed(2)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+
+                  {/* Rider uploaded documents */}
+                  {selectedEbike.documents && selectedEbike.documents.length > 0 && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>
+                        📄 Rider Documents ({selectedEbike.documents.length})
+                      </Text>
+
+
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.documentsScroll}
+                      >
+                        {selectedEbike.documents.map((d, index) => (
+                          <TouchableOpacity
+                            key={d.id || index}
+                            onPress={() => {
+                              if (d.url) {
+                                setSelectedDocument(d);
+                                setDocumentFullScreenVisible(true);
+                              }
+                            }}
+                            style={styles.documentThumbnail}
+                          >
+                            {d.url ? (
+                              <>
+                                <Image source={{ uri: d.url }} style={styles.documentThumb} />
+                                <View style={styles.documentTypeLabel}>
+                                  <Text style={styles.documentTypeText}>
+                                    {d.type === 'original' ? '📝' : '📄'}
+                                  </Text>
+                                </View>
+                              </>
+                            ) : (
+                              <View style={[styles.documentThumb, styles.documentPlaceholder]}>
+                                <Text style={styles.placeholderText}>No Image</Text>
                               </View>
-                            </>
-                          ) : (
-                            <View style={[styles.documentThumb, styles.documentPlaceholder]}>
-                              <Text style={styles.placeholderText}>No Image</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+
+                  {/* Admin verification docs (from matched ebike) */}
+                  {combinedAdminDocs.length > 0 && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>
+                        ✅ Admin Verification ({combinedAdminDocs.length})
+                      </Text>
+
+
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.documentsScroll}
+                      >
+                        {combinedAdminDocs.map((d, index) => (
+                          <TouchableOpacity
+                            key={`${d.type}_${index}`}
+                            onPress={() => {
+                              setSelectedDocument({ url: d.url, type: d.type });
+                              setDocumentFullScreenVisible(true);
+                            }}
+                            style={styles.documentThumbnail}
+                          >
+                            <Image source={{ uri: d.url }} style={styles.documentThumb} />
+                            <View style={styles.documentTypeLabel}>
+                              <Text style={styles.documentTypeText}>
+                                {d.type === 'admin_receipt' ? '🧾' : '✅'}
+                              </Text>
                             </View>
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {selectedEbike.adminVerificationImages && selectedEbike.adminVerificationImages.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>
-                      ✅ Admin Verification ({selectedEbike.adminVerificationImages.length})
-                    </Text>
-
-                    <ScrollView 
-                      horizontal 
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.documentsScroll}
-                    >
-                      {selectedEbike.adminVerificationImages.map((imageUrl, index) => (
-                        <TouchableOpacity
-                          key={index}
-                          onPress={() => {
-                            setSelectedDocument({ url: imageUrl, type: 'verification' });
-                            setDocumentFullScreenVisible(true);
-                          }}
-                          style={styles.documentThumbnail}
-                        >
-                          <Image
-                            source={{ uri: imageUrl }}
-                            style={styles.documentThumb}
-                          />
-                          <View style={styles.documentTypeLabel}>
-                            <Text style={styles.documentTypeText}>✅</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </>
-            )}
-          </ScrollView>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
+
 
   const renderDocumentFullScreen = () => (
     <Modal
@@ -700,25 +926,30 @@ export default function HomeAdmin({ navigation }) {
       onRequestClose={() => setDocumentFullScreenVisible(false)}
     >
       <View style={styles.imageModalContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.imageCloseButton}
           onPress={() => setDocumentFullScreenVisible(false)}
         >
           <Feather name="x" size={28} color="white" />
         </TouchableOpacity>
 
+
         {selectedDocument && (
           <>
-            <Image 
-              source={{ uri: selectedDocument.url }} 
+            <Image
+              source={{ uri: selectedDocument.url }}
               style={styles.fullImage}
               resizeMode="contain"
             />
             <View style={styles.documentInfoOverlay}>
               <Text style={styles.documentInfoText}>
-                {selectedDocument.type === 'original' 
-                  ? '📝 Original Document' 
-                  : '✅ Verification Document'}
+                {selectedDocument.type === 'original'
+                  ? '📝 Original Document'
+                  : selectedDocument.type === 'admin_receipt'
+                    ? '🧾 Admin Receipt'
+                    : selectedDocument.type === 'admin_ebike'
+                      ? '✅ Admin E-bike Photo'
+                      : '✅ Verification Document'}
               </Text>
             </View>
           </>
@@ -726,6 +957,7 @@ export default function HomeAdmin({ navigation }) {
       </View>
     </Modal>
   );
+
 
   const renderImageModal = () => (
     <Modal
@@ -743,13 +975,13 @@ export default function HomeAdmin({ navigation }) {
         ) : (
           <>
             {capturedImage && (
-              <Image 
-                source={{ uri: capturedImage }} 
+              <Image
+                source={{ uri: capturedImage }}
                 style={styles.fullImage}
                 resizeMode="contain"
               />
             )}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.imageCloseButton}
               onPress={() => {
                 setImageModalVisible(false);
@@ -764,6 +996,7 @@ export default function HomeAdmin({ navigation }) {
     </Modal>
   );
 
+
   const BINAN_MAPS_EMBED = `
     <html>
       <head>
@@ -774,26 +1007,29 @@ export default function HomeAdmin({ navigation }) {
         </style>
       </head>
       <body>
-        <iframe 
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d61856.07421696857!2d121.03201051994674!3d14.311163205767722!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397d70cc905e489%3A0xdbb7938dd87f5563!2zQsprog6FuLCBMYWd1bmE!5e0!3m2!1sen!2sph!4v1764121213329!5m2!1sen!2sph" 
-          width="100%" height="100%" style="border:0;" 
+        <iframe
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d61856.07421696857!2d121.03201051994674!3d14.311163205767722!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397d70cc905e489%3A0xdbb7938dd87f5563!2zQsprog6FuLCBMYWd1bmE!5e0!3m2!1sen!2sph!4v1764121213329!5m2!1sen!2sph"
+          width="100%" height="100%" style="border:0;"
           allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade">
         </iframe>
       </body>
     </html>
   `;
 
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-        > 
+        >
           <Text style={styles.greeting}>Hi, {userFirstName}</Text>
+
 
           <View style={styles.searchContainer}>
             <Text style={styles.searchLabel}>Search E-bike</Text>
+
 
             <View style={styles.searchInputContainer}>
               <TextInput
@@ -804,13 +1040,13 @@ export default function HomeAdmin({ navigation }) {
                 onChangeText={(text) => setPlateNumber(text.toUpperCase())}
                 editable={!searchLoading}
               />
-              <TouchableOpacity 
-                style={styles.helpButton} 
+              <TouchableOpacity
+                style={styles.helpButton}
                 onPress={handleQuestionMarkPress}
               >
                 <Feather name="help-circle" size={24} color={COLORS.ICON_GREEN} />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.searchButton, searchLoading && { opacity: 0.6 }]}
                 onPress={() => searchEbike(plateNumber)}
                 disabled={searchLoading}
@@ -823,8 +1059,9 @@ export default function HomeAdmin({ navigation }) {
               </TouchableOpacity>
             </View>
 
+
             <View style={styles.cameraButtonContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cameraButton}
                 onPress={capturePhoto}
                 disabled={detectionLoading}
@@ -833,7 +1070,8 @@ export default function HomeAdmin({ navigation }) {
                 <Text style={styles.cameraButtonText}>Capture Photo</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.cameraButton, { backgroundColor: '#2196F3' }]}
                 onPress={pickPhoto}
                 disabled={detectionLoading}
@@ -844,11 +1082,13 @@ export default function HomeAdmin({ navigation }) {
             </View>
           </View>
 
+
           <TouchableOpacity style={styles.greenRouteCard}>
             <View style={styles.mapPreviewContainer}>
               <View style={styles.mapPreviewHeader}>
                 <Text style={styles.mapPreviewTitle}>Green Routes in Binan</Text>
               </View>
+
 
               <View style={styles.mapWrapper}>
                 <WebView
@@ -862,7 +1102,8 @@ export default function HomeAdmin({ navigation }) {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.openMapButton}
             onPress={() => navigation.navigate('AdminMap')}
           >
@@ -870,6 +1111,7 @@ export default function HomeAdmin({ navigation }) {
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
+
 
       <View style={[styles.bottomBar, { height: BOTTOM_BAR_HEIGHT }]}>
         <SafeAreaView style={styles.bottomSafe}>
@@ -879,20 +1121,24 @@ export default function HomeAdmin({ navigation }) {
               <Text style={styles.bottomBarText}>Home</Text>
             </TouchableOpacity>
 
+
             <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("NewsScreen")}>
               <Feather name="file-text" size={24} color="white" />
               <Text style={styles.bottomBarText}>News</Text>
             </TouchableOpacity>
+
 
             <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("RiderScreen")}>
               <Feather name="users" size={24} color="white" />
               <Text style={styles.bottomBarText}>Rider</Text>
             </TouchableOpacity>
 
+
             <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("AdminAppointment")}>
               <Feather name="calendar" size={24} color="white" />
               <Text style={styles.bottomBarText}>Appointment</Text>
             </TouchableOpacity>
+
 
             <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("Me")}>
               <Feather name="user" size={24} color="white" />
@@ -902,12 +1148,14 @@ export default function HomeAdmin({ navigation }) {
         </SafeAreaView>
       </View>
 
+
       {renderDetailsModal()}
       {renderDocumentFullScreen()}
       {renderImageModal()}
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -1210,3 +1458,6 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   }
 });
+
+
+

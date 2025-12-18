@@ -11,9 +11,9 @@ import {
   ActivityIndicator
 } from "react-native";
 import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
-import { 
-  getFirestore, 
-  doc, 
+import {
+  getFirestore,
+  doc,
   getDoc,
   collection,
   query,
@@ -38,9 +38,11 @@ export default function Me({ navigation }) {
     contactNumber: "",
     address: ""
   });
+
   const [userRole, setUserRole] = useState(null);
   const [userDocId, setUserDocId] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
   const [isContactUsModalVisible, setIsContactUsModalVisible] = useState(false);
@@ -55,7 +57,7 @@ export default function Me({ navigation }) {
         try {
           const usersRef = collection(db, "users");
 
-          // 1) Try doc na may ID = uid
+          // 1) Try doc with ID = uid
           const userDocRef = doc(usersRef, user.uid);
           const userDocSnap = await getDoc(userDocRef);
 
@@ -67,7 +69,7 @@ export default function Me({ navigation }) {
             finalDocId = userDocSnap.id;
           }
 
-          // 2) Kung wala / walang role, hanap by email, piliin may role
+          // 2) If missing/no role, find by email and choose doc with role
           if (!finalData || !finalData.role) {
             const q = query(usersRef, where("email", "==", user.email));
             const querySnapshot = await getDocs(q);
@@ -84,10 +86,13 @@ export default function Me({ navigation }) {
           if (finalData) {
             console.log("User Document Data:", finalData);
 
+            // ✅ FIX #1: show Firestore email if it exists, fallback to auth email
+            const resolvedEmail = finalData.email || user.email || "No Email";
+
             setUserData({
               firstName: finalData.firstName || "",
               lastName: finalData.lastName || "",
-              email: user.email || "No Email",
+              email: resolvedEmail,
               profileImage: finalData.profileImage || null,
               contactNumber: finalData.contactNumber || "",
               address: finalData.address || ""
@@ -95,10 +100,11 @@ export default function Me({ navigation }) {
 
             const role = finalData.role || "Rider";
             console.log("Detected Role:", role);
+
             setUserRole(role);
-            setUserDocId(finalDocId);
+            setUserDocId(finalDocId || user.uid);
           } else {
-            // No doc sa Firestore → treat as Rider
+            // No doc in Firestore -> treat as Rider
             setUserData({
               firstName: "Rider",
               lastName: "",
@@ -135,12 +141,8 @@ export default function Me({ navigation }) {
   const onLogout = () => {
     const auth = getAuth(app);
     signOut(auth)
-      .then(() => {
-        navigation.replace("Login");
-      })
-      .catch((error) => {
-        Alert.alert("Logout Error", error.message);
-      });
+      .then(() => navigation.replace("Login"))
+      .catch((error) => Alert.alert("Logout Error", error.message));
   };
 
   const onDeleteAccount = () => {
@@ -167,15 +169,28 @@ export default function Me({ navigation }) {
               const db = getFirestore(app);
               const user = auth.currentUser;
 
-              if (user) {
-                await deleteDoc(doc(db, "users", user.uid));
-                await user.delete();
-                
-                Alert.alert("Success", "Account deleted successfully");
-                navigation.replace("Login");
-              }
+              if (!user) return;
+
+              // ✅ FIX #2: delete Firestore doc using userDocId (not always uid)
+              const docIdToDelete = userDocId || user.uid;
+              await deleteDoc(doc(db, "users", docIdToDelete));
+
+              // NOTE: Firebase may require recent login to delete auth user
+              await user.delete();
+
+              Alert.alert("Success", "Account deleted successfully");
+              navigation.replace("Login");
             } catch (error) {
-              Alert.alert("Error", error.message);
+              console.error("Delete account error:", error);
+
+              if (error?.code === "auth/requires-recent-login") {
+                Alert.alert(
+                  "Security check needed",
+                  "Please log out, log in again, then try deleting the account."
+                );
+              } else {
+                Alert.alert("Error", error?.message || "Failed to delete account");
+              }
             }
           }
         }
@@ -184,7 +199,7 @@ export default function Me({ navigation }) {
   };
 
   const getFullName = () => {
-    const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+    const fullName = `${userData.firstName || ""} ${userData.lastName || ""}`.trim();
     return fullName || "Rider";
   };
 
@@ -192,9 +207,7 @@ export default function Me({ navigation }) {
     console.log("User data updated:", updatedData);
     setUserData(prev => ({ ...prev, ...updatedData }));
 
-    if (updatedData.role) {
-      setUserRole(updatedData.role);
-    }
+    if (updatedData.role) setUserRole(updatedData.role);
 
     setIsEditModalVisible(false);
   };
@@ -212,41 +225,30 @@ export default function Me({ navigation }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* ✅ Full green header: Back left, Profile centered */}
         <View style={styles.header}>
-          {/* Left side: Back */}
           <View style={styles.headerSide}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Text style={styles.backArrow}>◂</Text>
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Center: Title */}
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Profile</Text>
           </View>
 
-          {/* Right side: empty placeholder para tunay na center si Profile */}
           <View style={styles.headerSide} />
         </View>
-        
+
         <ScrollView contentContainerStyle={styles.content}>
-          {/* Avatar Section */}
           <View style={styles.avatarWrap}>
-            <Image 
-              source={
-                userData.profileImage 
-                  ? { uri: userData.profileImage } 
-                  : DEFAULT_AVATAR
-              } 
-              style={styles.avatar} 
+            <Image
+              source={userData.profileImage ? { uri: userData.profileImage } : DEFAULT_AVATAR}
+              style={styles.avatar}
             />
             <Text style={styles.name}>{getFullName()}</Text>
             <Text style={styles.email}>{userData.email}</Text>
+
             {userRole && (
               <Text style={[styles.roleTag, isRider && styles.riderTag]}>
                 {userRole}
@@ -254,7 +256,6 @@ export default function Me({ navigation }) {
             )}
           </View>
 
-          {/* Account Details Card */}
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Account Details</Text>
             <View style={styles.row}>
@@ -267,10 +268,10 @@ export default function Me({ navigation }) {
             </View>
           </View>
 
-          {/* Account Card */}
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Account</Text>
-            <TouchableOpacity 
+
+            <TouchableOpacity
               onPress={onEditProfile}
               style={styles.row}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -278,56 +279,40 @@ export default function Me({ navigation }) {
               <Text style={styles.rowText}>Edit Profile</Text>
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={() => setIsTermsModalVisible(true)}
-              style={styles.row}
-            >
+
+            <TouchableOpacity onPress={() => setIsTermsModalVisible(true)} style={styles.row}>
               <Text style={styles.rowText}>Terms of Service</Text>
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={() => setIsContactUsModalVisible(true)}
-              style={styles.row}
-            >
+
+            <TouchableOpacity onPress={() => setIsContactUsModalVisible(true)} style={styles.row}>
               <Text style={styles.rowText}>Contact Us</Text>
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
           </View>
 
-          {/* App Card */}
           <View style={styles.card}>
             <Text style={styles.cardLabel}>App</Text>
-            <TouchableOpacity
-              onPress={() => setIsSettingsModalVisible(true)}
-              style={styles.row}
-            >
+
+            <TouchableOpacity onPress={() => setIsSettingsModalVisible(true)} style={styles.row}>
               <Text style={styles.rowText}>Settings</Text>
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
             {!isRider && (
-              <TouchableOpacity
-                onPress={onDeleteAccount}
-                style={[styles.row, styles.rowDanger]}
-              >
+              <TouchableOpacity onPress={onDeleteAccount} style={[styles.row, styles.rowDanger]}>
                 <Text style={[styles.rowText, styles.dangerText]}>Delete Account</Text>
                 <Text style={[styles.chev, styles.dangerText]}>›</Text>
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              onPress={onLogout}
-              style={[styles.row, styles.rowDanger]}
-            >
+            <TouchableOpacity onPress={onLogout} style={[styles.row, styles.rowDanger]}>
               <Text style={[styles.rowText, styles.dangerText]}>Log Out</Text>
               <Text style={[styles.chev, styles.dangerText]}>›</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
 
-        {/* Modals */}
         <EditProfileModal
           visible={isEditModalVisible}
           onClose={() => setIsEditModalVisible(false)}
@@ -360,45 +345,43 @@ export default function Me({ navigation }) {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff'
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff"
   },
-  // para full green hanggang status bar
   safeArea: {
     flex: 1,
-    backgroundColor: '#2e7d32'
+    backgroundColor: "#2e7d32"
   },
-  container: { 
-    flex: 1, 
-    backgroundColor: "#fff" 
+  container: {
+    flex: 1,
+    backgroundColor: "#fff"
   },
 
-  // 🔹 HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 40,         // layo sa oras/notif
+    paddingTop: 40,
     paddingBottom: 10,
     backgroundColor: "#2e7d32",
     borderBottomWidth: 1,
-    borderBottomColor: "#2e7d32",
+    borderBottomColor: "#2e7d32"
   },
   headerSide: {
-    width: 80,              // fixed width para sa Back at placeholder
-    justifyContent: "center",
+    width: 80,
+    justifyContent: "center"
   },
   headerCenter: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "center"
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 4,
-    paddingVertical: 4,
+    paddingVertical: 4
   },
   backArrow: {
     color: "#FFFFFF",
@@ -410,38 +393,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600"
   },
-  headerTitle: { 
-    color: "#fff", 
-    fontSize: 20, 
-    fontWeight: "700",
+  headerTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700"
   },
 
-  content: { 
-    padding: 16, 
-    paddingBottom: 40 
+  content: {
+    padding: 16,
+    paddingBottom: 40
   },
-  
-  // Avatar Section
-  avatarWrap: { 
-    alignItems: "center", 
-    marginBottom: 18 
+
+  avatarWrap: {
+    alignItems: "center",
+    marginBottom: 18
   },
   avatar: {
     width: 110,
     height: 110,
     borderRadius: 55,
     borderWidth: 3,
-    borderColor: "#eee",
+    borderColor: "#eee"
   },
-  name: { 
-    marginTop: 12, 
-    fontSize: 18, 
-    fontWeight: "700", 
-    color: "#113e21" 
+  name: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#113e21"
   },
-  email: { 
-    marginTop: 4, 
-    color: "#666" 
+  email: {
+    marginTop: 4,
+    color: "#666"
   },
   roleTag: {
     marginTop: 8,
@@ -451,50 +433,47 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
-    borderRadius: 12,
+    borderRadius: 12
   },
   riderTag: {
-    backgroundColor: "#1565c0",
+    backgroundColor: "#1565c0"
   },
-  
-  // Card Styles
+
   card: {
     backgroundColor: "#fff",
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
-    elevation: 2,
+    elevation: 2
   },
   cardLabel: {
     fontWeight: "700",
     fontSize: 16,
     color: "#113e21",
-    marginBottom: 8,
+    marginBottom: 8
   },
-  
-  // Row Styles
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    borderTopColor: "#f0f0f0"
   },
-  rowText: { 
-    fontSize: 15, 
-    color: "#333" 
+  rowText: {
+    fontSize: 15,
+    color: "#333"
   },
-  chev: { 
-    fontSize: 18, 
-    color: "#9e9e9e" 
+  chev: {
+    fontSize: 18,
+    color: "#9e9e9e"
   },
-  
-  // Danger Styles
-  rowDanger: { 
-    borderTopColor: "#f7dede" 
+
+  rowDanger: {
+    borderTopColor: "#f7dede"
   },
-  dangerText: { 
-    color: "#c21a1a" 
-  },
+  dangerText: {
+    color: "#c21a1a"
+  }
 });
