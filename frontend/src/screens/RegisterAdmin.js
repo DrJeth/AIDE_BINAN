@@ -278,7 +278,9 @@ export default function RegisterAdmin({ navigation }) {
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Personal Information</Text>
 
-      <Text style={styles.fieldLabel}>First Name</Text>
+      <Text style={styles.fieldLabel}>
+        First Name<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="First Name"
@@ -298,7 +300,9 @@ export default function RegisterAdmin({ navigation }) {
         autoCapitalize="characters"
       />
 
-      <Text style={styles.fieldLabel}>Last Name</Text>
+      <Text style={styles.fieldLabel}>
+        Last Name<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="Last Name"
@@ -308,7 +312,9 @@ export default function RegisterAdmin({ navigation }) {
         autoCapitalize="characters"
       />
 
-      <Text style={styles.fieldLabel}>Birthday</Text>
+      <Text style={styles.fieldLabel}>
+        Birthday<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TouchableOpacity
         style={styles.datePickerInput}
         onPress={() => setShowBirthdayPicker(true)}
@@ -345,7 +351,9 @@ export default function RegisterAdmin({ navigation }) {
         </View>
       )}
 
-      <Text style={styles.fieldLabel}>Contact Number</Text>
+      <Text style={styles.fieldLabel}>
+        Contact Number<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="09XXXXXXXXX"
@@ -359,7 +367,9 @@ export default function RegisterAdmin({ navigation }) {
         maxLength={11}
       />
 
-      <Text style={styles.fieldLabel}>Address</Text>
+      <Text style={styles.fieldLabel}>
+        Address<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="Address"
@@ -375,7 +385,9 @@ export default function RegisterAdmin({ navigation }) {
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Work Information</Text>
 
-      <Text style={styles.fieldLabel}>Employee Number</Text>
+      <Text style={styles.fieldLabel}>
+        Employee Number<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="Employee Number"
@@ -388,7 +400,9 @@ export default function RegisterAdmin({ navigation }) {
         maxLength={4}
       />
 
-      <Text style={styles.fieldLabel}>Position</Text>
+      <Text style={styles.fieldLabel}>
+        Position<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TouchableOpacity
         style={styles.dropdownInput}
         onPress={() => setPositionModalVisible(true)}
@@ -451,7 +465,9 @@ export default function RegisterAdmin({ navigation }) {
         </View>
       </Modal>
 
-      <Text style={styles.fieldLabel}>Email</Text>
+      <Text style={styles.fieldLabel}>
+        Email<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="example@gmail.com"
@@ -463,7 +479,9 @@ export default function RegisterAdmin({ navigation }) {
         autoCorrect={false}
       />
 
-      <Text style={styles.fieldLabel}>Password</Text>
+      <Text style={styles.fieldLabel}>
+        Password<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <View style={[styles.input, styles.passwordRow]}>
         <TextInput
           style={styles.passwordInput}
@@ -481,7 +499,9 @@ export default function RegisterAdmin({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.fieldLabel}>Confirm Password</Text>
+      <Text style={styles.fieldLabel}>
+        Confirm Password<Text style={styles.requiredStar}> *</Text>
+      </Text>
       <View style={[styles.input, styles.passwordRow]}>
         <TextInput
           style={styles.passwordInput}
@@ -617,6 +637,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#000",
     marginBottom: 6,
+  },
+  requiredStar: {
+    color: "red",
   },
 
   input: {

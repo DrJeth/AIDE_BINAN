@@ -613,7 +613,9 @@ function RegisterRider({ navigation }) {
       <Text style={styles.sectionTitle}>Personal Information</Text>
 
       <View style={styles.fieldContainer}>
-        <Text style={styles.fieldLabel}>First Name</Text>
+        <Text style={styles.fieldLabel}>
+          First Name<Text style={styles.requiredStar}> *</Text>
+        </Text>
         <View style={styles.inputCard}>
           <TextInput
             style={styles.input}
@@ -643,7 +645,9 @@ function RegisterRider({ navigation }) {
       </View>
 
       <View style={styles.fieldContainer}>
-        <Text style={styles.fieldLabel}>Last Name</Text>
+        <Text style={styles.fieldLabel}>
+          Last Name<Text style={styles.requiredStar}> *</Text>
+        </Text>
         <View style={styles.inputCard}>
           <TextInput
             style={styles.input}
@@ -658,7 +662,9 @@ function RegisterRider({ navigation }) {
       </View>
 
       <View style={styles.fieldContainer}>
-        <Text style={styles.fieldLabel}>Birthday</Text>
+        <Text style={styles.fieldLabel}>
+          Birthday<Text style={styles.requiredStar}> *</Text>
+        </Text>
         <View style={styles.inputCard}>
           <TouchableOpacity
             style={styles.datePickerRow}
@@ -701,7 +707,9 @@ function RegisterRider({ navigation }) {
       )}
 
       <View style={styles.fieldContainer}>
-        <Text style={styles.fieldLabel}>Contact Number</Text>
+        <Text style={styles.fieldLabel}>
+          Contact Number<Text style={styles.requiredStar}> *</Text>
+        </Text>
         <View style={styles.inputCard}>
           <TextInput
             style={styles.input}
@@ -717,7 +725,9 @@ function RegisterRider({ navigation }) {
       </View>
 
       <View style={styles.fieldContainer}>
-        <Text style={styles.fieldLabel}>Address</Text>
+        <Text style={styles.fieldLabel}>
+          Address<Text style={styles.requiredStar}> *</Text>
+        </Text>
         <View style={styles.inputCard}>
           <TextInput
             style={[styles.input, styles.multilineInput]}
@@ -735,7 +745,7 @@ function RegisterRider({ navigation }) {
     </View>
   );
 
-  // (renderEbikeSection unchanged - same as your code)
+  // (renderEbikeSection unchanged - same as your code, only added asterisks)
   const renderEbikeSection = () => (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>E-Bike Information</Text>
@@ -790,7 +800,9 @@ function RegisterRider({ navigation }) {
         </Text>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>E-Bike Brand</Text>
+          <Text style={styles.fieldLabel}>
+            E-Bike Brand<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
@@ -805,7 +817,9 @@ function RegisterRider({ navigation }) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Model Unit</Text>
+          <Text style={styles.fieldLabel}>
+            Model Unit<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
@@ -820,7 +834,9 @@ function RegisterRider({ navigation }) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>E-Bike Color</Text>
+          <Text style={styles.fieldLabel}>
+            E-Bike Color<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
@@ -835,7 +851,9 @@ function RegisterRider({ navigation }) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Chassis / Motor Number</Text>
+          <Text style={styles.fieldLabel}>
+            Chassis / Motor Number<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
@@ -867,7 +885,9 @@ function RegisterRider({ navigation }) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Plate Number</Text>
+          <Text style={styles.fieldLabel}>
+            Plate Number<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
@@ -922,7 +942,9 @@ function RegisterRider({ navigation }) {
         )}
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Email</Text>
+          <Text style={styles.fieldLabel}>
+            Email<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
@@ -939,7 +961,9 @@ function RegisterRider({ navigation }) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Password</Text>
+          <Text style={styles.fieldLabel}>
+            Password<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={[styles.inputCard, styles.passwordRow]}>
             <TextInput
               style={[styles.input, styles.passwordInput]}
@@ -957,7 +981,9 @@ function RegisterRider({ navigation }) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Confirm Password</Text>
+          <Text style={styles.fieldLabel}>
+            Confirm Password<Text style={styles.requiredStar}> *</Text>
+          </Text>
           <View style={[styles.inputCard, styles.passwordRow]}>
             <TextInput
               style={[styles.input, styles.passwordInput]}
@@ -1109,6 +1135,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
     marginBottom: 6,
+  },
+  requiredStar: {
+    color: "red",
   },
 
   inputCard: {
