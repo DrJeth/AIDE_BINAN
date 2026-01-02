@@ -28,8 +28,8 @@ export default function AppointmentScreen({ navigation }) {
   const [userData, setUserData] = useState({
     firstName: "",
     lastName: "",
-    plateNumber: "Not Set",   // primary plate (for saving appointment)
-    plateNumbers: [],         // ✅ ALL plates for display
+    plateNumber: "Not Set", // primary plate (for saving appointment)
+    plateNumbers: [], // ✅ ALL plates for display
     email: ""
   });
 
@@ -54,9 +54,7 @@ export default function AppointmentScreen({ navigation }) {
 
     // 2) New schema: ebikes array
     if (Array.isArray(ud.ebikes) && ud.ebikes.length > 0) {
-      const ebikePlates = ud.ebikes
-        .map((e) => e?.plateNumber)
-        .filter(Boolean);
+      const ebikePlates = ud.ebikes.map((e) => e?.plateNumber).filter(Boolean);
       plates.push(...ebikePlates);
     }
 
@@ -75,6 +73,58 @@ export default function AppointmentScreen({ navigation }) {
     return cleaned;
   };
 
+  // =========================
+  // ✅ GLOBAL SLOT VALIDATION (30 minutes gap)
+  // =========================
+  const MIN_GAP_MINUTES = 30; // diff <= 30 mins = conflict (10:30 still NOT allowed; 10:31 allowed)
+
+  const sameDayLocal = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const fmtTime = (d) =>
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const minutesDiff = (a, b) => Math.abs(a.getTime() - b.getTime()) / 60000;
+
+  const isWithinOfficeHours = (dt) => {
+    const totalMinutes = dt.getHours() * 60 + dt.getMinutes();
+    const startMinutes = 8 * 60; // 8:00 AM
+    const endMinutes = 17 * 60; // 5:00 PM
+    return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
+  };
+
+  const isWeekday = (dt) => {
+    const day = dt.getDay(); // 0=Sun, 6=Sat
+    return day !== 0 && day !== 6;
+  };
+
+  const isSlotFree = (candidateDT, busyDTs) => {
+    // ✅ conflict if diff <= 30 minutes
+    return busyDTs.every((busy) => minutesDiff(candidateDT, busy) > MIN_GAP_MINUTES);
+  };
+
+  const findNextVacantTimes = (baseDT, busyDTs, maxSuggestions = 5) => {
+    const suggestions = [];
+    const candidate = new Date(baseDT);
+    candidate.setSeconds(0);
+    candidate.setMilliseconds(0);
+
+    // scan forward by minute (up to 600 mins ~ 10 hrs)
+    for (let i = 0; i < 600 && suggestions.length < maxSuggestions; i++) {
+      candidate.setMinutes(candidate.getMinutes() + 1);
+
+      if (!isWeekday(candidate)) continue;
+      if (!isWithinOfficeHours(candidate)) continue;
+
+      if (isSlotFree(candidate, busyDTs)) {
+        suggestions.push(new Date(candidate));
+      }
+    }
+    return suggestions;
+  };
+
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -87,7 +137,8 @@ export default function AppointmentScreen({ navigation }) {
           if (userDoc.exists()) {
             const ud = userDoc.data();
             const allPlates = getAllPlateNumbers(ud);
-            const primaryPlate = allPlates.length > 0 ? allPlates[0] : (ud.plateNumber || "Not Set");
+            const primaryPlate =
+              allPlates.length > 0 ? allPlates[0] : ud.plateNumber || "Not Set";
 
             setUserData({
               firstName: ud.firstName || "",
@@ -107,7 +158,8 @@ export default function AppointmentScreen({ navigation }) {
               const ud = udoc.data();
 
               const allPlates = getAllPlateNumbers(ud);
-              const primaryPlate = allPlates.length > 0 ? allPlates[0] : (ud.plateNumber || "Not Set");
+              const primaryPlate =
+                allPlates.length > 0 ? allPlates[0] : ud.plateNumber || "Not Set";
 
               setUserData({
                 firstName: ud.firstName || "",
@@ -177,18 +229,19 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
-      // Combine date and time
+      // Combine date and time (LOCAL)
       const appointmentDateTime = new Date(
         selectedDate.getFullYear(),
         selectedDate.getMonth(),
         selectedDate.getDate(),
         selectedTime.getHours(),
-        selectedTime.getMinutes()
+        selectedTime.getMinutes(),
+        0,
+        0
       );
 
-      // ✅ Validate day: Monday–Friday only (0=Sun, 6=Sat)
-      const day = appointmentDateTime.getDay();
-      if (day === 0 || day === 6) {
+      // ✅ Validate day: Monday–Friday only
+      if (!isWeekday(appointmentDateTime)) {
         Alert.alert(
           "Unavailable Day",
           "Appointments can only be scheduled from Monday to Friday. Please choose a weekday."
@@ -197,14 +250,7 @@ export default function AppointmentScreen({ navigation }) {
       }
 
       // ✅ Validate time: 8:00 AM – 5:00 PM only
-      const hours = appointmentDateTime.getHours();
-      const minutes = appointmentDateTime.getMinutes();
-      const totalMinutes = hours * 60 + minutes;
-
-      const startMinutes = 8 * 60;   // 8:00 AM
-      const endMinutes = 17 * 60;    // 5:00 PM
-
-      if (totalMinutes < startMinutes || totalMinutes > endMinutes) {
+      if (!isWithinOfficeHours(appointmentDateTime)) {
         Alert.alert(
           "Unavailable Time",
           "Appointments are only available between 8:00 AM and 5:00 PM. Please select a time within office hours."
@@ -212,7 +258,14 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
-      // Check for existing pending appointments
+      // ✅ Validate: must be future time
+      const now = new Date();
+      if (appointmentDateTime.getTime() <= now.getTime()) {
+        Alert.alert("Invalid Time", "Please select a future time.");
+        return;
+      }
+
+      // Check for existing pending appointments (same user)
       const appointmentsQuery = query(
         collection(db, "appointments"),
         where("uid", "==", auth.currentUser.uid),
@@ -224,6 +277,73 @@ export default function AppointmentScreen({ navigation }) {
         Alert.alert(
           "Existing Appointment",
           "You already have a pending appointment. Please cancel the existing one first."
+        );
+        return;
+      }
+
+      // ✅ GLOBAL CONFLICT CHECK (same day, all riders)
+      // Range: start of selected day to start of next day
+      const dayStartLocal = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+        0,
+        0,
+        0,
+        0
+      );
+
+      const nextDayStartLocal = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate() + 1,
+        0,
+        0,
+        0,
+        0
+      );
+
+      const dayQuery = query(
+        collection(db, "appointments"),
+        where("appointmentDate", ">=", dayStartLocal.toISOString()),
+        where("appointmentDate", "<", nextDayStartLocal.toISOString())
+      );
+
+      const daySnap = await getDocs(dayQuery);
+
+      // busy = Pending + Approved only (ignore Rejected)
+      const busyDTs = daySnap.docs
+        .map((d) => d.data())
+        .filter(
+          (a) =>
+            a?.appointmentDate &&
+            (a.status === "Pending" || a.status === "Approved")
+        )
+        .map((a) => new Date(a.appointmentDate));
+
+      // conflict if any busy within 30 minutes (<= 30)
+      const conflictDT = busyDTs.find(
+        (busy) => minutesDiff(appointmentDateTime, busy) <= MIN_GAP_MINUTES
+      );
+
+      if (conflictDT) {
+        const startScan =
+          sameDayLocal(appointmentDateTime, now) && appointmentDateTime < now
+            ? now
+            : appointmentDateTime;
+
+        const suggestions = findNextVacantTimes(startScan, busyDTs, 5);
+
+        const suggestionText =
+          suggestions.length > 0
+            ? suggestions.map((d) => `• ${fmtTime(d)}`).join("\n")
+            : "No vacant time left for this day. Please choose another date.";
+
+        Alert.alert(
+          "Time Not Available",
+          `Someone has already booked a slot within 30 minutes of your selected time.\n\nNearest booked time: ${fmtTime(
+          conflictDT
+          )}\n\nSuggested available times:\n${suggestionText}`
         );
         return;
       }
@@ -278,7 +398,10 @@ export default function AppointmentScreen({ navigation }) {
         pendingAppointments.filter((appt) => appt.id !== appointmentId)
       );
 
-      Alert.alert("Appointment Canceled", "Your appointment has been canceled successfully.");
+      Alert.alert(
+        "Appointment Canceled",
+        "Your appointment has been canceled successfully."
+      );
     } catch (error) {
       console.error("Appointment cancellation error:", error);
       Alert.alert("Error", "Failed to cancel appointment. Please try again.");
@@ -303,10 +426,14 @@ export default function AppointmentScreen({ navigation }) {
         : {};
 
     const cancelButtonVisibility =
-      item.status === "Pending" ? styles.cancelButton : styles.hiddenCancelButton;
+      item.status === "Pending"
+        ? styles.cancelButton
+        : styles.hiddenCancelButton;
 
     const cancelButtonTextStyle =
-      item.status === "Pending" ? styles.cancelButtonText : styles.hiddenCancelButtonText;
+      item.status === "Pending"
+        ? styles.cancelButtonText
+        : styles.hiddenCancelButtonText;
 
     return (
       <View style={containerStyle}>
@@ -315,7 +442,11 @@ export default function AppointmentScreen({ navigation }) {
             {item.firstName} {item.lastName}
           </Text>
           <Text style={[styles.appointmentText, textStyle]}>
-            Date: {appointmentDate.toLocaleDateString()} at {appointmentDate.toLocaleTimeString()}
+            Date: {appointmentDate.toLocaleDateString()} at{" "}
+            {appointmentDate.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit"
+            })}
           </Text>
           <Text style={[styles.appointmentStatus, textStyle]}>
             Status: {item.status}
@@ -333,7 +464,10 @@ export default function AppointmentScreen({ navigation }) {
               "Are you sure you want to cancel this appointment?",
               [
                 { text: "No", style: "cancel" },
-                { text: "Yes", onPress: () => handleCancelAppointment(item.id) }
+                {
+                  text: "Yes",
+                  onPress: () => handleCancelAppointment(item.id)
+                }
               ]
             );
           }}
@@ -347,22 +481,23 @@ export default function AppointmentScreen({ navigation }) {
   const plateDisplay =
     Array.isArray(userData.plateNumbers) && userData.plateNumbers.length > 0
       ? userData.plateNumbers.join(", ")
-      : (userData.plateNumber && userData.plateNumber !== "Not Set"
-          ? userData.plateNumber
-          : "Not set – you can still schedule an appointment.");
+      : userData.plateNumber && userData.plateNumber !== "Not Set"
+      ? userData.plateNumber
+      : "Not set – you can still schedule an appointment.";
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ✅ HEADER (pantay si Back at title + safe sa status bar) */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
             <Text style={styles.backText}>◂ Back</Text>
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>Schedule Appointment</Text>
 
-          {/* spacer para perfectly centered yung title */}
           <View style={styles.headerRightSpace} />
         </View>
       </View>
@@ -377,7 +512,9 @@ export default function AppointmentScreen({ navigation }) {
                 <Text style={styles.labelText}>Name:</Text>
                 <Text style={styles.valueText}>
                   {userData.firstName || userData.lastName
-                    ? `${userData.firstName || ""} ${userData.lastName || ""}`.trim()
+                    ? `${userData.firstName || ""} ${
+                        userData.lastName || ""
+                      }`.trim()
                     : userData.email || "Not set – please update your profile"}
                 </Text>
               </View>
@@ -420,25 +557,45 @@ export default function AppointmentScreen({ navigation }) {
               >
                 <Text style={styles.pickerButtonText}>
                   Select Time:{" "}
-                  {selectedTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {selectedTime.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
                 </Text>
               </TouchableOpacity>
 
+              {/* ✅ UPDATED: force spinner (no analog clock) */}
               {showTimePicker && (
                 <DateTimePicker
                   value={selectedTime}
                   mode="time"
                   is24Hour={false}
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  display="spinner"
+                  minuteInterval={1}
                   onChange={(event, time) => {
                     setShowTimePicker(Platform.OS === "ios");
-                    if (time) setSelectedTime(time);
+
+                    // Android dismiss handling
+                    if (Platform.OS === "android" && event?.type === "dismissed")
+                      return;
+
+                    if (time) {
+                      const cleanTime = new Date(time);
+                      cleanTime.setSeconds(0);
+                      cleanTime.setMilliseconds(0);
+                      setSelectedTime(cleanTime);
+                    }
                   }}
                 />
               )}
 
-              <TouchableOpacity style={styles.scheduleButton} onPress={handleScheduleAppointment}>
-                <Text style={styles.scheduleButtonText}>Schedule Appointment</Text>
+              <TouchableOpacity
+                style={styles.scheduleButton}
+                onPress={handleScheduleAppointment}
+              >
+                <Text style={styles.scheduleButtonText}>
+                  Schedule Appointment
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -495,7 +652,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 20
   },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#2e7d32" },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#2e7d32"
+  },
   userInfoRow: { flexDirection: "row", marginBottom: 5 },
   labelText: { fontWeight: "bold", marginRight: 10, color: "#333" },
   valueText: { color: "#666", flex: 1, flexWrap: "wrap" },
@@ -537,8 +699,16 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 10
   },
-  approvedAppointmentItem: { backgroundColor: "#e8f5e9", borderColor: "#2e7d32", borderWidth: 1 },
-  rejectedAppointmentItem: { backgroundColor: "#ffebee", borderColor: "#d32f2f", borderWidth: 1 },
+  approvedAppointmentItem: {
+    backgroundColor: "#e8f5e9",
+    borderColor: "#2e7d32",
+    borderWidth: 1
+  },
+  rejectedAppointmentItem: {
+    backgroundColor: "#ffebee",
+    borderColor: "#d32f2f",
+    borderWidth: 1
+  },
 
   appointmentDetails: { flex: 1, marginRight: 10 },
   appointmentName: { color: "#333", fontWeight: "bold" },

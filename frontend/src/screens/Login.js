@@ -17,12 +17,25 @@ import {
   LogBox,
   ActivityIndicator
 } from "react-native";
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut
+} from "firebase/auth";
 import { auth } from "../config/firebaseConfig";
-import { collection, getFirestore, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  getFirestore,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+  getDoc
+} from "firebase/firestore";
 
 LogBox.ignoreLogs([
-  'Non-serializable values were found in the navigation state',
+  "Non-serializable values were found in the navigation state",
 ]);
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -38,30 +51,32 @@ const generateVerificationCode = () => {
 };
 
 export default function Login({ navigation }) {
-  const [role, setRole] = useState("Admin");
+  // ❌ removed role switching
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [registrationModalVisible, setRegistrationModalVisible] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);      // login loading
-  const [isResetting, setIsResetting] = useState(false);  // NEW: forgot-password loading
-  
-  // NEW: show/hide password
+  const [isResetting, setIsResetting] = useState(false);  // forgot-password loading
+
+  // show/hide password
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Email verification states
   const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [tempUserEmail, setTempUserEmail] = useState("");
-  const [tempUserRole, setTempUserRole] = useState("");
-  const [tempUserDocId, setTempUserDocId] = useState("");
+  const [tempUserRole, setTempUserRole] = useState("");     // detected role
+  const [tempUserDocId, setTempUserDocId] = useState("");   // detected user doc id
   const [resendCountdown, setResendCountdown] = useState(0);
-  
+
   // 2FA states
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [twoFACode, setTwoFACode] = useState("");
   const [isVerifying2FA, setIsVerifying2FA] = useState(false);
-  
+
   const db = getFirestore();
 
   // Countdown timer for resend button
@@ -69,7 +84,7 @@ export default function Login({ navigation }) {
     let interval;
     if (resendCountdown > 0) {
       interval = setInterval(() => {
-        setResendCountdown(prev => prev - 1);
+        setResendCountdown((prev) => prev - 1);
       }, 1000);
     }
     return () => clearInterval(interval);
@@ -131,7 +146,7 @@ export default function Login({ navigation }) {
       // Call PHP backend to send email
       try {
         console.log("Calling PHP backend...");
-        
+
         const response = await fetch(BACKEND_URL, {
           method: "POST",
           headers: {
@@ -157,13 +172,13 @@ export default function Login({ navigation }) {
         }
       } catch (error) {
         console.error("PHP backend error:", error);
-        
+
         // Fallback: Show code in alert
         console.log(`\n=== VERIFICATION CODE (Fallback) ===`);
         console.log(`Email: ${userEmail}`);
         console.log(`Code: ${verificationCode}`);
         console.log(`====================================\n`);
-        
+
         Alert.alert(
           "Code Generated",
           `Your verification code is:\n\n${verificationCode}`,
@@ -178,7 +193,15 @@ export default function Login({ navigation }) {
     }
   };
 
-  // Verify email code
+  const navigateByRole = (roleValue) => {
+    if (roleValue === "Rider") {
+      navigation.replace("HomeRider");
+    } else {
+      navigation.replace("HomeAdmin");
+    }
+  };
+
+  // Verify email code (DOC-ID based)
   const handleVerifyEmailCode = async () => {
     console.log("Verifying email code:", emailVerificationCode);
 
@@ -194,47 +217,44 @@ export default function Login({ navigation }) {
 
     setIsVerifyingEmail(true);
     try {
-      // Get user data to verify code
-      const userQuery = query(
-        collection(db, "users"),
-        where("email", "==", tempUserEmail),
-        where("role", "==", tempUserRole)
-      );
+      if (!tempUserDocId) {
+        Alert.alert("Error", "Missing user reference. Please login again.");
+        await signOut(auth);
+        return;
+      }
 
-      const userSnapshot = await getDocs(userQuery);
+      const userRef = doc(db, "users", tempUserDocId);
+      const snap = await getDoc(userRef);
 
-      if (!userSnapshot.empty) {
-        const userData = userSnapshot.docs[0].data();
-        console.log("Verifying email code against user data");
+      if (!snap.exists()) {
+        Alert.alert("Error", "User not found. Please login again.");
+        await signOut(auth);
+        return;
+      }
 
-        // Check if code matches
-        if (userData.emailVerificationCode === emailVerificationCode) {
-          console.log("Email verification successful!");
+      const userData = snap.data();
+      console.log("User data fetched for email verify.");
 
-          setShowEmailVerificationModal(false);
-          setEmailVerificationCode("");
+      if (userData.emailVerificationCode === emailVerificationCode) {
+        console.log("Email verification successful!");
 
-          // After email verification, check if 2FA is enabled
-          if (userData.twoFAEnabled === true) {
-            console.log("2FA is ENABLED - showing 2FA modal");
-            Alert.alert("Success", "Email verified! Now verify 2FA.");
-            setShow2FAModal(true);
-          } else {
-            console.log("2FA is NOT enabled - proceeding to home");
-            Alert.alert("Success", "Email verified! Logging in...");
-            setTimeout(() => {
-              if (tempUserRole === "Rider") {
-                navigation.replace("HomeRider");
-              } else {
-                navigation.replace("HomeAdmin");
-              }
-            }, 500);
-          }
+        setShowEmailVerificationModal(false);
+        setEmailVerificationCode("");
+
+        // After email verification, check if 2FA is enabled
+        if (userData.twoFAEnabled === true) {
+          console.log("2FA is ENABLED - showing 2FA modal");
+          Alert.alert("Success", "Email verified! Now verify 2FA.");
+          setShow2FAModal(true);
         } else {
-          Alert.alert("Invalid Code", "The verification code you entered is incorrect.");
+          console.log("2FA is NOT enabled - proceeding to home");
+          Alert.alert("Success", "Email verified! Logging in...");
+          setTimeout(() => {
+            navigateByRole(tempUserRole);
+          }, 500);
         }
       } else {
-        Alert.alert("Error", "User not found");
+        Alert.alert("Invalid Code", "The verification code you entered is incorrect.");
       }
     } catch (error) {
       console.error("Email verification error:", error);
@@ -253,7 +273,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // Verify 2FA code
+  // Verify 2FA code (DOC-ID based)
   const handleVerify2FA = async () => {
     console.log("Verifying 2FA code:", twoFACode);
 
@@ -269,39 +289,36 @@ export default function Login({ navigation }) {
 
     setIsVerifying2FA(true);
     try {
-      const userQuery = query(
-        collection(db, "users"),
-        where("email", "==", tempUserEmail),
-        where("role", "==", tempUserRole)
-      );
+      if (!tempUserDocId) {
+        Alert.alert("Error", "Missing user reference. Please login again.");
+        await signOut(auth);
+        return;
+      }
 
-      const userSnapshot = await getDocs(userQuery);
+      const userRef = doc(db, "users", tempUserDocId);
+      const snap = await getDoc(userRef);
 
-      if (!userSnapshot.empty) {
-        const userData = userSnapshot.docs[0].data();
-        console.log("Verifying against user data:", userData);
+      if (!snap.exists()) {
+        Alert.alert("Error", "User not found. Please login again.");
+        await signOut(auth);
+        return;
+      }
 
-        if (userData.twoFAEnabled === true && userData.twoFACode === twoFACode) {
-          console.log("2FA verification successful!");
-          Alert.alert("Success", "Login successful!");
+      const userData = snap.data();
+      console.log("User data fetched for 2FA verify.");
 
-          setShow2FAModal(false);
-          setTwoFACode("");
+      if (userData.twoFAEnabled === true && userData.twoFACode === twoFACode) {
+        console.log("2FA verification successful!");
+        Alert.alert("Success", "Login successful!");
 
-          setTimeout(() => {
-            if (tempUserRole === "Rider") {
-              console.log("Navigating to HomeRider");
-              navigation.replace("HomeRider");
-            } else {
-              console.log("Navigating to HomeAdmin");
-              navigation.replace("HomeAdmin");
-            }
-          }, 500);
-        } else {
-          Alert.alert("Invalid Code", "The 2FA code you entered is incorrect.");
-        }
+        setShow2FAModal(false);
+        setTwoFACode("");
+
+        setTimeout(() => {
+          navigateByRole(tempUserRole);
+        }, 500);
       } else {
-        Alert.alert("Error", "User not found");
+        Alert.alert("Invalid Code", "The 2FA code you entered is incorrect.");
       }
     } catch (error) {
       console.error("2FA verification error:", error);
@@ -311,18 +328,19 @@ export default function Login({ navigation }) {
     }
   };
 
-  // Resend 2FA code
+  // Resend 2FA code (placeholder)
   const handleResend2FA = () => {
     console.log("Resend 2FA code");
     Alert.alert("Code Sent", "A new 2FA code has been sent to your email");
   };
 
   const handleLogin = async () => {
-    console.log("Attempting login with email:", email, "role:", role);
+    console.log("Attempting login with email:", email);
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const trimmedEmail = email.trim();
 
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(trimmedEmail)) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
       return;
     }
@@ -335,116 +353,82 @@ export default function Login({ navigation }) {
     setIsLoading(true);
     try {
       console.log("Firebase authentication...");
-      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await signInWithEmailAndPassword(auth, trimmedEmail, password);
       console.log("Authentication successful");
 
-      // Check user role and get user document
-      if (role === "Rider") {
-        console.log("Checking Rider role...");
-        const riderQuery = query(
-          collection(db, "users"),
-          where("email", "==", email.trim()),
-          where("role", "==", "Rider")
-        );
-        const riderSnapshot = await getDocs(riderQuery);
+      // ✅ AUTO-DETECT ROLE from Firestore by email
+      console.log("Detecting role from Firestore users collection...");
+      const userQuery = query(
+        collection(db, "users"),
+        where("email", "==", trimmedEmail)
+      );
 
-        if (riderSnapshot.empty) {
-          console.log("No rider found");
-          await auth.signOut();
-          Alert.alert("Login Error", "No rider account found with this email.");
-          setIsLoading(false);
-          return;
-        }
+      const userSnapshot = await getDocs(userQuery);
 
-        const userData = riderSnapshot.docs[0].data();
-        const userDocId = riderSnapshot.docs[0].id;
-        console.log("Rider data found:", userData);
-
-        // Check if email verification is enabled
-        if (userData.emailVerificationEnabled === true) {
-          console.log("Email verification is ENABLED - sending code");
-          setTempUserEmail(email.trim());
-          setTempUserRole("Rider");
-          setTempUserDocId(userDocId);
-
-          const codeSent = await sendEmailVerificationCode(email.trim(), userDocId);
-          if (codeSent) {
-            setShowEmailVerificationModal(true);
-            setResendCountdown(60);
-          }
-        } else {
-          console.log("Email verification is NOT enabled - checking 2FA");
-          if (userData.twoFAEnabled === true) {
-            console.log("2FA is ENABLED - showing 2FA modal");
-            setTempUserEmail(email.trim());
-            setTempUserRole("Rider");
-            setShow2FAModal(true);
-          } else {
-            console.log("Both verifications disabled - proceeding to HomeRider");
-            navigation.replace("HomeRider");
-          }
-        }
-
-        setIsLoading(false);
-        return;
-      } else {
-        // Admin login
-        console.log("Checking Admin role...");
-        const adminQuery = query(
-          collection(db, "users"),
-          where("email", "==", email.trim()),
-          where("role", "==", "Admin")
-        );
-        const adminSnapshot = await getDocs(adminQuery);
-
-        if (adminSnapshot.empty) {
-          console.log("No admin found");
-          await auth.signOut();
-          Alert.alert("Login Error", "No admin account found with this email.");
-          setIsLoading(false);
-          return;
-        }
-
-        const userData = adminSnapshot.docs[0].data();
-        const userDocId = adminSnapshot.docs[0].id;
-        console.log("Admin data found:", userData);
-
-        // Check if email verification is enabled
-        if (userData.emailVerificationEnabled === true) {
-          console.log("Email verification is ENABLED - sending code");
-          setTempUserEmail(email.trim());
-          setTempUserRole("Admin");
-          setTempUserDocId(userDocId);
-
-          const codeSent = await sendEmailVerificationCode(email.trim(), userDocId);
-          if (codeSent) {
-            setShowEmailVerificationModal(true);
-            setResendCountdown(60);
-          }
-        } else {
-          console.log("Email verification is NOT enabled - checking 2FA");
-          if (userData.twoFAEnabled === true) {
-            console.log("2FA is ENABLED - showing 2FA modal");
-            setTempUserEmail(email.trim());
-            setTempUserRole("Admin");
-            setShow2FAModal(true);
-          } else {
-            console.log("Both verifications disabled - proceeding to HomeAdmin");
-            navigation.replace("HomeAdmin");
-          }
-        }
-
-        setIsLoading(false);
+      if (userSnapshot.empty) {
+        console.log("No user document found for:", trimmedEmail);
+        await signOut(auth);
+        Alert.alert("Login Error", "No account found in the system for this email.");
         return;
       }
+
+      if (userSnapshot.size > 1) {
+        console.log("Multiple user docs found for same email:", trimmedEmail);
+        await signOut(auth);
+        Alert.alert(
+          "Login Error",
+          "Multiple accounts found for this email. Please contact the administrator."
+        );
+        return;
+      }
+
+      const userDoc = userSnapshot.docs[0];
+      const userData = userDoc.data();
+      const userDocId = userDoc.id;
+
+      const detectedRole = userData.role; // "Admin" or "Rider"
+      console.log("User detected role:", detectedRole, "docId:", userDocId);
+
+      if (detectedRole !== "Admin" && detectedRole !== "Rider") {
+        await signOut(auth);
+        Alert.alert("Login Error", "Invalid user role. Please contact administrator.");
+        return;
+      }
+
+      // store temp values for verification flows
+      setTempUserEmail(trimmedEmail);
+      setTempUserRole(detectedRole);
+      setTempUserDocId(userDocId);
+
+      // Check if email verification is enabled
+      if (userData.emailVerificationEnabled === true) {
+        console.log("Email verification is ENABLED - sending code");
+        const codeSent = await sendEmailVerificationCode(trimmedEmail, userDocId);
+        if (codeSent) {
+          setShowEmailVerificationModal(true);
+          setResendCountdown(60);
+        }
+        return;
+      }
+
+      // If no email verification, check 2FA
+      if (userData.twoFAEnabled === true) {
+        console.log("2FA is ENABLED - showing 2FA modal");
+        setShow2FAModal(true);
+        return;
+      }
+
+      // Both verifications disabled - proceed
+      console.log("No verifications enabled - proceeding to home");
+      navigateByRole(detectedRole);
     } catch (error) {
       console.error("Login error:", error);
 
-      if (error.code === 'auth/invalid-email') {
+      if (error.code === "auth/invalid-email") {
         Alert.alert("Invalid Email", "Please enter a valid email address.");
-      } else if (error.code === 'auth/user-not-found') {
+      } else if (error.code === "auth/user-not-found") {
         Alert.alert("Login Failed", "No user found with this email address.");
-      } else if (error.code === 'auth/wrong-password') {
+      } else if (error.code === "auth/wrong-password") {
         Alert.alert("Login Failed", "Incorrect password. Please try again.");
       } else {
         Alert.alert("Login Failed", error.message || "Unable to log in.");
@@ -493,35 +477,6 @@ export default function Login({ navigation }) {
             </View>
 
             <View style={styles.whiteCard}>
-              <View style={styles.tabsRow}>
-                <TouchableOpacity style={styles.tabTouch} onPress={() => setRole("Admin")}>
-                  <Text style={[styles.tabText, role === "Admin" && styles.tabTextActive]}>
-                    Admin
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.tabTouch} onPress={() => setRole("Rider")}>
-                  <Text style={[styles.tabText, role === "Rider" && styles.tabTextActive]}>
-                    Rider
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.progressRow}>
-                <View
-                  style={[
-                    styles.progressSegment,
-                    role === "Admin" ? styles.progressGreen : styles.progressDark,
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.progressSegment,
-                    role === "Rider" ? styles.progressGreen : styles.progressDark,
-                  ]}
-                />
-              </View>
-
               <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
@@ -629,7 +584,10 @@ export default function Login({ navigation }) {
             />
 
             <TouchableOpacity
-              style={[styles.verificationButton, isVerifyingEmail && styles.verificationButtonDisabled]}
+              style={[
+                styles.verificationButton,
+                isVerifyingEmail && styles.verificationButtonDisabled,
+              ]}
               onPress={handleVerifyEmailCode}
               disabled={isVerifyingEmail}
             >
@@ -643,7 +601,7 @@ export default function Login({ navigation }) {
             <TouchableOpacity
               style={[
                 styles.resendButton,
-                resendCountdown > 0 && styles.resendButtonDisabled
+                resendCountdown > 0 && styles.resendButtonDisabled,
               ]}
               onPress={handleResendEmailCode}
               disabled={isVerifyingEmail || resendCountdown > 0}
@@ -655,12 +613,13 @@ export default function Login({ navigation }) {
 
             <TouchableOpacity
               style={styles.cancelButton}
-              onPress={() => {
+              onPress={async () => {
                 if (!isVerifyingEmail) {
                   setShowEmailVerificationModal(false);
                   setEmailVerificationCode("");
                   setEmail("");
                   setPassword("");
+                  await signOut(auth); // ✅ security: cancel = logout
                 }
               }}
               disabled={isVerifyingEmail}
@@ -724,12 +683,13 @@ export default function Login({ navigation }) {
 
             <TouchableOpacity
               style={styles.cancelButton}
-              onPress={() => {
+              onPress={async () => {
                 if (!isVerifying2FA) {
                   setShow2FAModal(false);
                   setTwoFACode("");
                   setEmail("");
                   setPassword("");
+                  await signOut(auth); // ✅ security: cancel = logout
                 }
               }}
               disabled={isVerifying2FA}
@@ -740,7 +700,7 @@ export default function Login({ navigation }) {
         </View>
       </Modal>
 
-      {/* REGISTRATION SELECTION MODAL */}
+      {/* REGISTRATION SELECTION MODAL (unchanged) */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -842,35 +802,6 @@ const styles = StyleSheet.create({
     borderColor: "#cccccc",
     elevation: 8,
   },
-  tabsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  tabTouch: {
-    paddingVertical: 6,
-  },
-  tabText: {
-    color: "#333",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  tabTextActive: {
-    color: "#2e7d32",
-  },
-  progressRow: {
-    flexDirection: "row",
-    marginTop: 10,
-    marginBottom: 15,
-    paddingHorizontal: 10,
-  },
-  progressSegment: {
-    flex: 1,
-    height: 3,
-    borderRadius: 3,
-    marginHorizontal: 4,
-  },
-  progressGreen: { backgroundColor: "#2e7d32" },
-  progressDark: { backgroundColor: "#222" },
   label: {
     fontWeight: "700",
     color: "#333",
@@ -930,107 +861,107 @@ const styles = StyleSheet.create({
   /* MODALS */
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)'
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
 
   /* EMAIL VERIFICATION MODAL */
   emailVerificationModalContent: {
-    width: '85%',
-    backgroundColor: 'white',
+    width: "85%",
+    backgroundColor: "white",
     borderRadius: 20,
     padding: 30,
-    alignItems: 'center',
+    alignItems: "center",
   },
   verificationTitle: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: "800",
     marginBottom: 8,
-    color: '#333',
+    color: "#333",
   },
   verificationSubtitle: {
     fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginBottom: 30,
   },
   verificationCodeInput: {
-    width: '100%',
+    width: "100%",
     borderWidth: 2,
-    borderColor: '#2e7d32',
+    borderColor: "#2e7d32",
     borderRadius: 12,
     padding: 16,
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     letterSpacing: 8,
     marginBottom: 24,
   },
   verificationButton: {
-    width: '100%',
-    backgroundColor: '#2e7d32',
+    width: "100%",
+    backgroundColor: "#2e7d32",
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 12,
   },
   verificationButtonDisabled: {
     opacity: 0.6,
   },
   verificationButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
   /* 2FA Modal */
   twoFAModalContent: {
-    width: '85%',
-    backgroundColor: 'white',
+    width: "85%",
+    backgroundColor: "white",
     borderRadius: 20,
     padding: 30,
-    alignItems: 'center',
+    alignItems: "center",
   },
   twoFATitle: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: "800",
     marginBottom: 8,
-    color: '#333',
+    color: "#333",
   },
   twoFASubtitle: {
     fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginBottom: 30,
   },
   twoFACodeInput: {
-    width: '100%',
+    width: "100%",
     borderWidth: 2,
-    borderColor: '#2e7d32',
+    borderColor: "#2e7d32",
     borderRadius: 12,
     padding: 16,
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     letterSpacing: 8,
     marginBottom: 24,
   },
   twoFAButton: {
-    width: '100%',
-    backgroundColor: '#2e7d32',
+    width: "100%",
+    backgroundColor: "#2e7d32",
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 12,
   },
   twoFAButtonDisabled: {
     opacity: 0.6,
   },
   twoFAButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
   resendButton: {
@@ -1040,59 +971,59 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   resendText: {
-    color: '#2e7d32',
+    color: "#2e7d32",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 
   cancelButton: {
-    width: '100%',
+    width: "100%",
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   cancelText: {
-    color: '#666',
+    color: "#666",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 
   /* Registration Modal */
   modalContent: {
-    width: '80%',
-    backgroundColor: 'white',
+    width: "80%",
+    backgroundColor: "white",
     borderRadius: 20,
     padding: 20,
-    alignItems: 'center'
+    alignItems: "center",
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
-    color: '#333'
+    color: "#333",
   },
   modalButton: {
-    width: '100%',
-    backgroundColor: '#2e7d32',
+    width: "100%",
+    backgroundColor: "#2e7d32",
     padding: 15,
     borderRadius: 10,
     marginBottom: 10,
-    alignItems: 'center'
+    alignItems: "center",
   },
   modalButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600'
+    fontWeight: "600",
   },
   modalCancelButton: {
-    width: '100%',
-    backgroundColor: '#f0f0f0',
+    width: "100%",
+    backgroundColor: "#f0f0f0",
     padding: 15,
     borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10
+    alignItems: "center",
+    marginTop: 10,
   },
   modalCancelText: {
-    color: '#333',
-    fontSize: 16
-  }
+    color: "#333",
+    fontSize: 16,
+  },
 });
