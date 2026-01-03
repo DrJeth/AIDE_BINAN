@@ -24,7 +24,6 @@ import {
 import { app } from "../config/firebaseConfig";
 import EditProfileModal from "./EditProfileModal";
 import TermsService from "./TermsService";
-import ContactUs from "./ContactUs";
 import SettingsRider from "./SettingRider";
 
 const DEFAULT_AVATAR = require("../../assets/me.png");
@@ -45,7 +44,6 @@ export default function Me({ navigation }) {
 
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
-  const [isContactUsModalVisible, setIsContactUsModalVisible] = useState(false);
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
 
   useEffect(() => {
@@ -84,9 +82,6 @@ export default function Me({ navigation }) {
           }
 
           if (finalData) {
-            console.log("User Document Data:", finalData);
-
-            // ✅ FIX #1: show Firestore email if it exists, fallback to auth email
             const resolvedEmail = finalData.email || user.email || "No Email";
 
             setUserData({
@@ -99,12 +94,9 @@ export default function Me({ navigation }) {
             });
 
             const role = finalData.role || "Rider";
-            console.log("Detected Role:", role);
-
             setUserRole(role);
             setUserDocId(finalDocId || user.uid);
           } else {
-            // No doc in Firestore -> treat as Rider
             setUserData({
               firstName: "Rider",
               lastName: "",
@@ -134,7 +126,6 @@ export default function Me({ navigation }) {
   }, [navigation]);
 
   const onEditProfile = () => {
-    console.log("Edit Profile Pressed - Role:", userRole);
     setIsEditModalVisible(true);
   };
 
@@ -171,11 +162,9 @@ export default function Me({ navigation }) {
 
               if (!user) return;
 
-              // ✅ FIX #2: delete Firestore doc using userDocId (not always uid)
               const docIdToDelete = userDocId || user.uid;
               await deleteDoc(doc(db, "users", docIdToDelete));
 
-              // NOTE: Firebase may require recent login to delete auth user
               await user.delete();
 
               Alert.alert("Success", "Account deleted successfully");
@@ -204,11 +193,8 @@ export default function Me({ navigation }) {
   };
 
   const handleUpdateUser = (updatedData) => {
-    console.log("User data updated:", updatedData);
     setUserData(prev => ({ ...prev, ...updatedData }));
-
     if (updatedData.role) setUserRole(updatedData.role);
-
     setIsEditModalVisible(false);
   };
 
@@ -285,10 +271,7 @@ export default function Me({ navigation }) {
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setIsContactUsModalVisible(true)} style={styles.row}>
-              <Text style={styles.rowText}>Contact Us</Text>
-              <Text style={styles.chev}>›</Text>
-            </TouchableOpacity>
+            {/* ✅ Contact Us removed */}
           </View>
 
           <View style={styles.card}>
@@ -325,11 +308,6 @@ export default function Me({ navigation }) {
         <TermsService
           visible={isTermsModalVisible}
           onClose={() => setIsTermsModalVisible(false)}
-        />
-
-        <ContactUs
-          visible={isContactUsModalVisible}
-          onClose={() => setIsContactUsModalVisible(false)}
         />
 
         <SettingsRider

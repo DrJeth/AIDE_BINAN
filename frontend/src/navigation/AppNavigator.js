@@ -14,7 +14,6 @@ import Me from "../screens/Me";
 import Transaction from "../screens/Transaction";
 import TermsService from "../screens/TermsService";
 import Faq from "../screens/Faq";
-import ContactUs from "../screens/ContactUs";
 import About from "../screens/About";
 import Logout from "../screens/Logout";
 import MyAccount from "../screens/MyAccount";
@@ -34,15 +33,15 @@ import Appointment from "../screens/Appointment";
 import NewsScreen from "../screens/NewsScreen";
 import RiderScreen from "../screens/RiderScreen";
 import AdminAppointment from "../screens/AdminAppointment";
+
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator 
-      initialRouteName="LandingPage1" 
+    <Stack.Navigator
+      initialRouteName="LandingPage1"
       screenOptions={{ headerShown: false }}
     >
-      
       <Stack.Screen name="LandingPage1" component={LandingPage1} />
       <Stack.Screen name="LandingPage2" component={LandingPage2} />
       <Stack.Screen name="LandingPage3" component={LandingPage3} />
@@ -50,11 +49,14 @@ export default function AppNavigator() {
       <Stack.Screen name="Login" component={Login} />
       <Stack.Screen name="RegisterRider" component={RegisterRider} />
       <Stack.Screen name="RegisterAdmin" component={RegisterAdmin} />
+
       <Stack.Screen name="Main" component={TabNavigator} />
+
       <Stack.Screen name="GreenRouteMap" component={GreenRouteMap} />
       <Stack.Screen name="AdminMap" component={AdminMap} />
       <Stack.Screen name="HomeRider" component={HomeRider} />
       <Stack.Screen name="HomeAdmin" component={HomeAdmin} />
+
       <Stack.Screen name="Ordinance" component={Ordinance} />
       <Stack.Screen name="Purpose" component={Purpose} />
       <Stack.Screen name="Definition1" component={Definition1} />
@@ -62,14 +64,19 @@ export default function AppNavigator() {
       <Stack.Screen name="Definition3" component={Definition3} />
       <Stack.Screen name="Requirements" component={Requirements} />
       <Stack.Screen name="Imposition" component={Imposition} />
-      <Stack.Screen name="Appointment" component={Appointment} options={{ headerShown: false }}/>
       <Stack.Screen name="Provision" component={Provision} />
       <Stack.Screen name="Penalty" component={Penalty} />
+
+      <Stack.Screen
+        name="Appointment"
+        component={Appointment}
+        options={{ headerShown: false }}
+      />
+
       <Stack.Screen name="Me" component={Me} />
       <Stack.Screen name="Transaction" component={Transaction} />
       <Stack.Screen name="TermsService" component={TermsService} />
       <Stack.Screen name="Faq" component={Faq} />
-      <Stack.Screen name="ContactUs" component={ContactUs} />
       <Stack.Screen name="About" component={About} />
       <Stack.Screen name="NewsScreen" component={NewsScreen} />
       <Stack.Screen name="AdminAppointment" component={AdminAppointment} />
