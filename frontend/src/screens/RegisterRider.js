@@ -72,8 +72,32 @@ function RegisterRider({ navigation }) {
   // ✅ editing mode for added ebike
   const [editingEbikeId, setEditingEbikeId] = useState(null);
 
+  // ✅ NEW: errors state for red highlight
+  const [errors, setErrors] = useState({});
+
+  const clearError = (key) => {
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const setSectionErrors = (keys, errObj) => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      keys.forEach((k) => delete next[k]); // clear old errors for this section
+      Object.keys(errObj).forEach((k) => {
+        if (errObj[k]) next[k] = true;
+      });
+      return next;
+    });
+  };
+
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    clearError(key); // ✅ remove red highlight while typing
   };
 
   const toUpper = (v) => (v ?? "").toString().toUpperCase();
@@ -155,42 +179,57 @@ function RegisterRider({ navigation }) {
   };
 
   const validatePersonalInfo = () => {
-    const personalFields = [
-      { key: "firstName", label: "First Name" },
-      { key: "lastName", label: "Last Name" },
-      { key: "contactNumber", label: "Contact Number" },
-      { key: "address", label: "Address" },
+    const sectionKeys = [
+      "firstName",
+      "lastName",
+      "birthday",
+      "contactNumber",
+      "address",
     ];
 
-    for (let field of personalFields) {
-      if (
-        !form[field.key] ||
-        (typeof form[field.key] === "string" && form[field.key].trim() === "")
-      ) {
-        Alert.alert("Error", `Please fill in ${field.label}`);
-        return false;
-      }
+    const err = {};
+    const messages = [];
+
+    if (!form.firstName?.trim()) {
+      err.firstName = true;
+      messages.push("Please fill in First Name");
+    }
+
+    if (!form.lastName?.trim()) {
+      err.lastName = true;
+      messages.push("Please fill in Last Name");
     }
 
     if (!form.birthday) {
-      Alert.alert("Error", "Please select your birthday");
-      return false;
+      err.birthday = true;
+      messages.push("Please select your birthday");
+    } else {
+      const age = validateAge(form.birthday);
+      if (age < 18) {
+        err.birthday = true;
+        messages.push(
+          `You must be at least 18 years old to register. You are currently ${age} years old.`
+        );
+      }
     }
 
-    const age = validateAge(form.birthday);
-    if (age < 18) {
-      Alert.alert(
-        "Error",
-        `You must be at least 18 years old to register. You are currently ${age} years old.`
-      );
-      return false;
+    if (!form.contactNumber?.trim()) {
+      err.contactNumber = true;
+      messages.push("Please fill in Contact Number");
+    } else if (!validateContactNumber(form.contactNumber)) {
+      err.contactNumber = true;
+      messages.push("Contact number must start with 09 and have 11 digits");
     }
 
-    if (!validateContactNumber(form.contactNumber)) {
-      Alert.alert(
-        "Error",
-        "Contact number must start with 09 and have 11 digits"
-      );
+    if (!form.address?.trim()) {
+      err.address = true;
+      messages.push("Please fill in Address");
+    }
+
+    setSectionErrors(sectionKeys, err);
+
+    if (messages.length) {
+      Alert.alert("Error", messages[0]);
       return false;
     }
 
@@ -198,40 +237,61 @@ function RegisterRider({ navigation }) {
   };
 
   const validateCurrentEbikeEntry = () => {
-    const ebikeFields = [
-      { key: "ebikeBrand", label: "E-Bike Brand" },
-      { key: "ebikeModel", label: "Model Unit" },
-      { key: "ebikeColor", label: "E-Bike Color" },
-      { key: "plateNumber", label: "Plate Number" },
+    const sectionKeys = [
+      "ebikeBrand",
+      "ebikeModel",
+      "ebikeColor",
+      "chassisMotorNumber",
+      "plateNumber",
     ];
 
-    for (let field of ebikeFields) {
-      if (field.key === "plateNumber" && noPlateNumber) continue;
+    const err = {};
+    const messages = [];
 
-      const value = form[field.key];
-      if (
-        value === null ||
-        value === "" ||
-        (typeof value === "string" && value.trim() === "")
-      ) {
-        Alert.alert("Error", `Please fill in ${field.label}`);
-        return false;
+    if (!form.ebikeBrand?.trim()) {
+      err.ebikeBrand = true;
+      messages.push("Please fill in E-Bike Brand");
+    }
+
+    if (!form.ebikeModel?.trim()) {
+      err.ebikeModel = true;
+      messages.push("Please fill in Model Unit");
+    }
+
+    if (!form.ebikeColor?.trim()) {
+      err.ebikeColor = true;
+      messages.push("Please fill in E-Bike Color");
+    }
+
+    if (!form.chassisMotorNumber?.trim()) {
+      err.chassisMotorNumber = true;
+      messages.push(
+        'Please enter Chassis Number (10-12 digits), Motor Number (15-20 digits), or type "none"'
+      );
+    } else if (!validateChassisMotorNumber(form.chassisMotorNumber)) {
+      err.chassisMotorNumber = true;
+      messages.push(
+        'Please enter Chassis Number (10-12 digits), Motor Number (15-20 digits), or type "none"'
+      );
+    }
+
+    // plate only required if noPlateNumber is false
+    if (!noPlateNumber) {
+      if (!form.plateNumber?.trim()) {
+        err.plateNumber = true;
+        messages.push("Please fill in Plate Number");
+      } else if (!validatePlateNumber(form.plateNumber)) {
+        err.plateNumber = true;
+        messages.push(
+          "Plate Number must be in format: 2 letters followed by 4 numbers (e.g., AB1234)"
+        );
       }
     }
 
-    if (!validateChassisMotorNumber(form.chassisMotorNumber)) {
-      Alert.alert(
-        "Error",
-        'Please enter Chassis Number (10-12 digits), Motor Number (15-20 digits), or type "none"'
-      );
-      return false;
-    }
+    setSectionErrors(sectionKeys, err);
 
-    if (!noPlateNumber && !validatePlateNumber(form.plateNumber)) {
-      Alert.alert(
-        "Error",
-        "Plate Number must be in format: 2 letters followed by 4 numbers (e.g., AB1234)"
-      );
+    if (messages.length) {
+      Alert.alert("Error", messages[0]);
       return false;
     }
 
@@ -239,33 +299,42 @@ function RegisterRider({ navigation }) {
   };
 
   const validateAccountInfo = () => {
-    if (!form.email || form.email.trim() === "") {
-      Alert.alert("Error", "Please fill in Email");
+    const sectionKeys = ["email", "password", "confirmPassword"];
+    const err = {};
+    const messages = [];
+
+    if (!form.email?.trim()) {
+      err.email = true;
+      messages.push("Please fill in Email");
+    } else if (!validateEmail(form.email)) {
+      err.email = true;
+      messages.push("Email must be a valid Gmail address (e.g., name@gmail.com)");
+    }
+
+    if (!form.password?.trim()) {
+      err.password = true;
+      messages.push("Please fill in Password");
+    } else if (form.password.length < 6) {
+      err.password = true;
+      messages.push("Password must be at least 6 characters long");
+    }
+
+    if (!form.confirmPassword?.trim()) {
+      err.confirmPassword = true;
+      messages.push("Please fill in Confirm Password");
+    } else if (form.password !== form.confirmPassword) {
+      err.password = true;
+      err.confirmPassword = true;
+      messages.push("Passwords do not match");
+    }
+
+    setSectionErrors(sectionKeys, err);
+
+    if (messages.length) {
+      Alert.alert("Error", messages[0]);
       return false;
     }
-    if (!validateEmail(form.email)) {
-      Alert.alert(
-        "Error",
-        "Email must be a valid Gmail address (e.g., name@gmail.com)"
-      );
-      return false;
-    }
-    if (!form.password || form.password.trim() === "") {
-      Alert.alert("Error", "Please fill in Password");
-      return false;
-    }
-    if (!form.confirmPassword || form.confirmPassword.trim() === "") {
-      Alert.alert("Error", "Please fill in Confirm Password");
-      return false;
-    }
-    if (form.password !== form.confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      return false;
-    }
-    if (form.password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters long");
-      return false;
-    }
+
     return true;
   };
 
@@ -278,6 +347,15 @@ function RegisterRider({ navigation }) {
     update("plateNumber", "");
     setNoPlateNumber(false);
     setEditingEbikeId(null);
+
+    // ✅ clear ebike-related errors when reset
+    setErrors((prev) => {
+      const next = { ...prev };
+      ["ebikeBrand", "ebikeModel", "ebikeColor", "chassisMotorNumber", "plateNumber"].forEach(
+        (k) => delete next[k]
+      );
+      return next;
+    });
   };
 
   const startEditEbike = (item) => {
@@ -296,6 +374,15 @@ function RegisterRider({ navigation }) {
       branch: item?.branch || "",
       plateNumber: hasPlate ? (item?.plateNumber || "") : "",
     }));
+
+    // ✅ clear errors when editing existing
+    setErrors((prev) => {
+      const next = { ...prev };
+      ["ebikeBrand", "ebikeModel", "ebikeColor", "chassisMotorNumber", "plateNumber"].forEach(
+        (k) => delete next[k]
+      );
+      return next;
+    });
 
     scrollToBottom();
   };
@@ -616,7 +703,7 @@ function RegisterRider({ navigation }) {
         <Text style={styles.fieldLabel}>
           First Name<Text style={styles.requiredStar}> *</Text>
         </Text>
-        <View style={styles.inputCard}>
+        <View style={[styles.inputCard, errors.firstName && styles.inputCardError]}>
           <TextInput
             style={styles.input}
             placeholder="Enter your first name"
@@ -648,7 +735,7 @@ function RegisterRider({ navigation }) {
         <Text style={styles.fieldLabel}>
           Last Name<Text style={styles.requiredStar}> *</Text>
         </Text>
-        <View style={styles.inputCard}>
+        <View style={[styles.inputCard, errors.lastName && styles.inputCardError]}>
           <TextInput
             style={styles.input}
             placeholder="Enter your last name"
@@ -665,7 +752,7 @@ function RegisterRider({ navigation }) {
         <Text style={styles.fieldLabel}>
           Birthday<Text style={styles.requiredStar}> *</Text>
         </Text>
-        <View style={styles.inputCard}>
+        <View style={[styles.inputCard, errors.birthday && styles.inputCardError]}>
           <TouchableOpacity
             style={styles.datePickerRow}
             onPress={() => !loading && setShowDatePicker(true)}
@@ -688,7 +775,10 @@ function RegisterRider({ navigation }) {
           display="spinner"
           onChange={(event, selectedDate) => {
             setShowDatePicker(false);
-            if (selectedDate) update("birthday", selectedDate);
+            if (selectedDate) {
+              update("birthday", selectedDate);
+              clearError("birthday");
+            }
           }}
         />
       )}
@@ -700,8 +790,10 @@ function RegisterRider({ navigation }) {
           display="default"
           onChange={(event, selectedDate) => {
             setShowDatePicker(Platform.OS === "ios");
-            if (event.type === "set" && selectedDate)
+            if (event.type === "set" && selectedDate) {
               update("birthday", selectedDate);
+              clearError("birthday");
+            }
           }}
         />
       )}
@@ -710,7 +802,12 @@ function RegisterRider({ navigation }) {
         <Text style={styles.fieldLabel}>
           Contact Number<Text style={styles.requiredStar}> *</Text>
         </Text>
-        <View style={styles.inputCard}>
+        <View
+          style={[
+            styles.inputCard,
+            errors.contactNumber && styles.inputCardError,
+          ]}
+        >
           <TextInput
             style={styles.input}
             placeholder="09XXXXXXXXX"
@@ -728,7 +825,7 @@ function RegisterRider({ navigation }) {
         <Text style={styles.fieldLabel}>
           Address<Text style={styles.requiredStar}> *</Text>
         </Text>
-        <View style={styles.inputCard}>
+        <View style={[styles.inputCard, errors.address && styles.inputCardError]}>
           <TextInput
             style={[styles.input, styles.multilineInput]}
             placeholder="Enter your address"
@@ -745,7 +842,6 @@ function RegisterRider({ navigation }) {
     </View>
   );
 
-  // (renderEbikeSection unchanged - same as your code, only added asterisks)
   const renderEbikeSection = () => (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>E-Bike Information</Text>
@@ -764,13 +860,16 @@ function RegisterRider({ navigation }) {
               </View>
 
               <Text style={styles.ebikeLine}>
-                <Text style={styles.ebikeLabel}>Brand:</Text> {e.ebikeBrand || "-"}
+                <Text style={styles.ebikeLabel}>Brand:</Text>{" "}
+                {e.ebikeBrand || "-"}
               </Text>
               <Text style={styles.ebikeLine}>
-                <Text style={styles.ebikeLabel}>Model:</Text> {e.ebikeModel || "-"}
+                <Text style={styles.ebikeLabel}>Model:</Text>{" "}
+                {e.ebikeModel || "-"}
               </Text>
               <Text style={styles.ebikeLine}>
-                <Text style={styles.ebikeLabel}>Color:</Text> {e.ebikeColor || "-"}
+                <Text style={styles.ebikeLabel}>Color:</Text>{" "}
+                {e.ebikeColor || "-"}
               </Text>
               <Text style={styles.ebikeLine}>
                 <Text style={styles.ebikeLabel}>Chassis/Motor:</Text>{" "}
@@ -781,11 +880,17 @@ function RegisterRider({ navigation }) {
               </Text>
 
               <View style={styles.cardActions}>
-                <TouchableOpacity onPress={() => startEditEbike(e)} disabled={loading}>
+                <TouchableOpacity
+                  onPress={() => startEditEbike(e)}
+                  disabled={loading}
+                >
                   <Text style={styles.editText}>Edit</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => removeEbikeFromList(e.id)} disabled={loading}>
+                <TouchableOpacity
+                  onPress={() => removeEbikeFromList(e.id)}
+                  disabled={loading}
+                >
                   <Text style={styles.removeText}>Remove</Text>
                 </TouchableOpacity>
               </View>
@@ -803,7 +908,12 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             E-Bike Brand<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={styles.inputCard}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.ebikeBrand && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="Enter E-bike brand"
@@ -820,7 +930,12 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Model Unit<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={styles.inputCard}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.ebikeModel && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="Enter model unit"
@@ -837,7 +952,12 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             E-Bike Color<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={styles.inputCard}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.ebikeColor && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="Enter E-bike color"
@@ -854,7 +974,12 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Chassis / Motor Number<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={styles.inputCard}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.chassisMotorNumber && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="10–12 or 15–20 digits, or type 'none'"
@@ -888,7 +1013,12 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Plate Number<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={styles.inputCard}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.plateNumber && !noPlateNumber && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="e.g., AB1234"
@@ -910,13 +1040,15 @@ function RegisterRider({ navigation }) {
               onPress={() => {
                 if (loading) return;
                 setNoPlateNumber((prev) => !prev);
+                clearError("plateNumber");
                 if (!noPlateNumber) update("plateNumber", "");
               }}
             >
               {noPlateNumber && <Text style={styles.checkboxTick}>✓</Text>}
             </TouchableOpacity>
             <Text style={styles.checkboxLabel}>
-              Check this if this is your e-bike&apos;s first registration and you don&apos;t have a plate number yet.
+              Check this if this is your e-bike&apos;s first registration and you
+              don&apos;t have a plate number yet.
             </Text>
           </View>
         </View>
@@ -945,7 +1077,7 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Email<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={styles.inputCard}>
+          <View style={[styles.inputCard, errors.email && styles.inputCardError]}>
             <TextInput
               style={styles.input}
               placeholder="name@gmail.com"
@@ -964,7 +1096,13 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Password<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={[styles.inputCard, styles.passwordRow]}>
+          <View
+            style={[
+              styles.inputCard,
+              styles.passwordRow,
+              errors.password && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={[styles.input, styles.passwordInput]}
               placeholder="Minimum 6 characters"
@@ -974,7 +1112,9 @@ function RegisterRider({ navigation }) {
               secureTextEntry={!showPassword}
               editable={!loading}
             />
-            <TouchableOpacity onPress={() => !loading && setShowPassword((prev) => !prev)}>
+            <TouchableOpacity
+              onPress={() => !loading && setShowPassword((prev) => !prev)}
+            >
               <Text style={styles.toggleText}>{showPassword ? "Hide" : "Show"}</Text>
             </TouchableOpacity>
           </View>
@@ -984,7 +1124,13 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Confirm Password<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View style={[styles.inputCard, styles.passwordRow]}>
+          <View
+            style={[
+              styles.inputCard,
+              styles.passwordRow,
+              errors.confirmPassword && styles.inputCardError,
+            ]}
+          >
             <TextInput
               style={[styles.input, styles.passwordInput]}
               placeholder="Re-enter password"
@@ -995,7 +1141,9 @@ function RegisterRider({ navigation }) {
               editable={!loading}
             />
             <TouchableOpacity
-              onPress={() => !loading && setShowConfirmPassword((prev) => !prev)}
+              onPress={() =>
+                !loading && setShowConfirmPassword((prev) => !prev)
+              }
             >
               <Text style={styles.toggleText}>
                 {showConfirmPassword ? "Hide" : "Show"}
@@ -1034,15 +1182,14 @@ function RegisterRider({ navigation }) {
               ? renderPersonalSection()
               : renderEbikeSection()}
 
-            {/* ✅ UPDATED: Back button is now beside Next/Submit */}
             <View style={styles.navigationButtons}>
               <TouchableOpacity
                 style={[styles.button, styles.backButtonStyle]}
                 onPress={() => {
                   if (activeSection === "personal") {
-                    confirmExit(); // ✅ confirmation
+                    confirmExit();
                   } else {
-                    setActiveSection("personal"); // back to personal
+                    setActiveSection("personal");
                   }
                 }}
                 disabled={loading}
@@ -1101,7 +1248,6 @@ const styles = StyleSheet.create({
   },
   greenHeaderText: { color: "#FFFFFF", fontSize: 18, fontWeight: "700" },
 
-  // ✅ UPDATED header style to center title
   headerContainer: {
     paddingVertical: 15,
     paddingHorizontal: 20,
@@ -1147,6 +1293,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     ...cardShadow,
   },
+
+  // ✅ NEW: red highlight style
+  inputCardError: {
+    borderWidth: 1,
+    borderColor: "#F44336",
+  },
+
   input: { fontSize: 14, color: "#000", paddingVertical: 8 },
   multilineInput: { textAlignVertical: "top" },
 
