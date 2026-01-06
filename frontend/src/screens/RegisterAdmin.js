@@ -19,20 +19,28 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import {
   getFirestore,
   collection,
-  addDoc,
   query,
   where,
   getDocs,
+  doc,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { auth } from "../config/firebaseConfig";
 
+// ✅ 3 roles only (as requested)
 const ALLOWED_POSITIONS = [
   "Processing of E-bike Registration",
   "Validator of E-bike Registration",
-  "Inspection",
-  "Office Supervisor",
-  "Community Affairs Officer",
+  "Inspector",
 ];
+
+// ✅ map Position -> adminTaskRole (this is what HomeAdmin will read)
+const POSITION_TO_TASK_ROLE = {
+  "Processing of E-bike Registration": "processing",
+  "Validator of E-bike Registration": "validator",
+  "Inspector": "inspector",
+};
 
 export default function RegisterAdmin({ navigation }) {
   const [activeSection, setActiveSection] = useState("personal");
@@ -178,6 +186,7 @@ export default function RegisterAdmin({ navigation }) {
       return false;
     }
 
+    // ✅ 3 roles only
     if (!ALLOWED_POSITIONS.includes(form.position)) {
       Alert.alert("Error", "Please select a valid position");
       return false;
@@ -221,6 +230,10 @@ export default function RegisterAdmin({ navigation }) {
     try {
       const normalizedEmail = (form.email || "").toLowerCase().trim();
 
+      // ✅ derive adminTaskRole from selected position
+      const adminTaskRole = POSITION_TO_TASK_ROLE[form.position] || "processing";
+
+      // ✅ check employeeNumber uniqueness
       const employeeQuery = query(
         collection(db, "users"),
         where("employeeNumber", "==", form.employeeNumber)
@@ -231,6 +244,7 @@ export default function RegisterAdmin({ navigation }) {
         return;
       }
 
+      // ✅ check email uniqueness
       const emailQuery = query(
         collection(db, "users"),
         where("email", "==", normalizedEmail)
@@ -241,14 +255,19 @@ export default function RegisterAdmin({ navigation }) {
         return;
       }
 
+      // ✅ create auth account
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         normalizedEmail,
         form.password
       );
 
-      await addDoc(collection(db, "users"), {
-        uid: userCredential.user.uid,
+      const uid = userCredential.user.uid;
+
+      // ✅ IMPORTANT FIX:
+      // Use setDoc with docId = uid (so HomeAdmin can read doc(db,"users",uid))
+      await setDoc(doc(db, "users", uid), {
+        uid: uid,
         firstName: form.firstName,
         middleName: form.middleName,
         lastName: form.lastName,
@@ -257,10 +276,16 @@ export default function RegisterAdmin({ navigation }) {
         address: form.address,
         employeeNumber: form.employeeNumber,
         department: form.department,
+
+        // Keep position label (for display)
         position: form.position,
+
+        // ✅ THIS FIELD CONTROLS WHAT TABS THEY SEE
+        adminTaskRole: adminTaskRole, // "processing" | "validator" | "inspector"
+
         email: normalizedEmail,
         role: "Admin",
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
         status: "active",
       });
 
@@ -532,7 +557,6 @@ export default function RegisterAdmin({ navigation }) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
       >
-        {/* ✅ HEADER (No back button + moved down) */}
         <View style={styles.headerContainer}>
           <Text style={styles.headerTitle}>Create Admin Account</Text>
         </View>
@@ -548,12 +572,11 @@ export default function RegisterAdmin({ navigation }) {
             ? renderPersonalSection()
             : renderWorkSection()}
 
-          {/* ✅ BUTTONS (Personal has Back+Next now with confirmation) */}
           <View style={styles.navigationButtons}>
             {activeSection === "personal" ? (
               <TouchableOpacity
                 style={[styles.button, styles.backButtonStyle]}
-                onPress={confirmExit} // ✅ confirm before leaving
+                onPress={confirmExit}
                 disabled={loading}
               >
                 <Text style={styles.backButtonText}>Back</Text>
@@ -638,9 +661,7 @@ const styles = StyleSheet.create({
     color: "#000",
     marginBottom: 6,
   },
-  requiredStar: {
-    color: "red",
-  },
+  requiredStar: { color: "red" },
 
   input: {
     borderWidth: 1,

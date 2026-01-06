@@ -15,18 +15,25 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  limit
+} from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, app } from '../config/firebaseConfig';
-import { Linking } from 'react-native';
-
+import { useRoute } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BOTTOM_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 68;
-
 
 const COLORS = {
   PRIMARY_GREEN: '#2E7D32',
@@ -36,7 +43,6 @@ const COLORS = {
   ICON_GREEN: '#2E7D32',
   BOTTOM_BAR_GREEN: '#2E7D32'
 };
-
 
 // (Optional) — you used in admin modal. Keep.
 const EBIKE_CATEGORIES = [
@@ -53,7 +59,6 @@ const EBIKE_CATEGORIES = [
   { label: 'Category N3 (e-truck)', value: 'N3' }
 ];
 
-
 const formatDate = (dateValue) => {
   if (!dateValue) return 'N/A';
   try {
@@ -68,6 +73,21 @@ const formatDate = (dateValue) => {
   }
 };
 
+const formatDateTime = (dateValue) => {
+  if (!dateValue) return '';
+  try {
+    const date = new Date(dateValue?.toDate?.() || dateValue);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return '';
+  }
+};
 
 const normalizePlate = (v = '') =>
   v
@@ -77,11 +97,9 @@ const normalizePlate = (v = '') =>
     .replace(/-/g, '')
     .trim();
 
-
 const getEbikeStatus = (ebike, userStatus) => {
   return ebike?.status || userStatus || 'Pending';
 };
-
 
 const computeOverallUserStatus = (ebikes = []) => {
   const statuses = ebikes.map(e => e?.status).filter(Boolean);
@@ -89,7 +107,6 @@ const computeOverallUserStatus = (ebikes = []) => {
   if (statuses.length > 0 && statuses.every(s => s === 'Rejected')) return 'Rejected';
   return 'Verified';
 };
-
 
 // ✅ SAME normalize logic as RiderScreen (supports multi-ebike + legacy)
 const normalizeUserEbikes = (userData) => {
@@ -104,7 +121,6 @@ const normalizeUserEbikes = (userData) => {
       plateNumber: e?.plateNumber || '',
       hasPlate: typeof e?.hasPlate === 'boolean' ? e.hasPlate : !!e?.plateNumber,
 
-
       status: e?.status || userData.status || 'Pending',
       ebikeCategorySelected: e?.ebikeCategorySelected || '',
       registeredDate: e?.registeredDate || null,
@@ -114,20 +130,16 @@ const normalizeUserEbikes = (userData) => {
       rejectedAt: e?.rejectedAt || null,
       rejectedBy: e?.rejectedBy || null,
 
-
       adminVerificationDocs: e?.adminVerificationDocs || null,
       transactionHistory: Array.isArray(e?.transactionHistory) ? e.transactionHistory : [],
 
-
       // legacy docs (if any)
       adminVerificationImages: Array.isArray(e?.adminVerificationImages) ? e.adminVerificationImages : [],
-
 
       paymentDetails: e?.paymentDetails || null,
       createdAt: e?.createdAt || null,
     }));
   }
-
 
   // legacy single ebike
   return [{
@@ -140,7 +152,6 @@ const normalizeUserEbikes = (userData) => {
     plateNumber: userData?.plateNumber || '',
     hasPlate: !!userData?.plateNumber,
 
-
     status: userData?.status || 'Pending',
     ebikeCategorySelected: userData?.ebikeCategorySelected || '',
     registeredDate: userData?.registeredDate || null,
@@ -150,26 +161,21 @@ const normalizeUserEbikes = (userData) => {
     rejectedAt: userData?.rejectedAt || null,
     rejectedBy: userData?.rejectedBy || null,
 
-
     adminVerificationDocs: userData?.adminVerificationDocs || null,
     transactionHistory: Array.isArray(userData?.transactionHistory) ? userData.transactionHistory : [],
     adminVerificationImages: Array.isArray(userData?.adminVerificationImages) ? userData.adminVerificationImages : [],
-
 
     paymentDetails: userData?.paymentDetails || null,
     createdAt: userData?.createdAt || null,
   }];
 };
 
-
 const getRegistrationStatusFromEbike = (ebike) => {
   if (!ebike?.renewalDate) return null;
-
 
   const today = new Date();
   const renewalDate = new Date(ebike.renewalDate?.toDate?.() || ebike.renewalDate);
   const daysUntilExpiry = Math.floor((renewalDate - today) / (1000 * 60 * 60 * 24));
-
 
   if (daysUntilExpiry < 0) {
     return { status: 'Expired', daysLeft: 0, color: '#F44336' };
@@ -180,13 +186,75 @@ const getRegistrationStatusFromEbike = (ebike) => {
   }
 };
 
-
 const getCategoryLabel = (categoryValue) => {
   if (!categoryValue) return 'N/A';
   const category = EBIKE_CATEGORIES.find(c => c.value === categoryValue);
   return category ? category.label : categoryValue;
 };
 
+// ✅ FIX: ADMIN ROLE NORMALIZER (role-first; ignores "adminTask" like "for inspection" unless role is missing)
+const normalizeAdminTask = (position = "", adminTaskRole = "", adminTask = "") => {
+  const roleText = [adminTaskRole, position]
+    .filter(Boolean)
+    .join(" ")
+    .toString()
+    .toLowerCase()
+    .trim();
+
+  const taskText = (adminTask || "")
+    .toString()
+    .toLowerCase()
+    .trim();
+
+  if (roleText) {
+    if (/\bprocess/.test(roleText)) return "processing";
+    if (/\bvalidat/.test(roleText)) return "validator";
+    if (/\binspect/.test(roleText)) return "inspector";
+    return "unknown";
+  }
+
+  if (/\bprocess/.test(taskText)) return "processing";
+  if (/\bvalidat/.test(taskText)) return "validator";
+  if (/\binspect/.test(taskText)) return "inspector";
+
+  return "unknown";
+};
+
+// ✅ Route param resolver (supports many param names from other screens/login)
+const resolveAdminTaskFromParams = (params = {}) => {
+  return normalizeAdminTask(
+    params?.position || params?.adminPosition || params?.jobTitle || "",
+    params?.adminTaskRole || params?.adminRole || params?.role || params?.userRole || "",
+    params?.adminTask || params?.task || params?.adminTaskType || params?.type || ""
+  );
+};
+
+const VALID_ADMIN_TASKS = ["processing", "validator", "inspector"];
+const isValidAdminTask = (t) => VALID_ADMIN_TASKS.includes((t || "").toString().toLowerCase());
+
+const ADMIN_TABS = {
+  processing: [
+    { key: "home", label: "Home", icon: "home", screen: "HomeAdmin" },
+    { key: "rider", label: "Rider", icon: "users", screen: "RiderScreen", params: { view: "normal" } },
+    { key: "profile", label: "Profile", icon: "user", screen: "Me" },
+  ],
+  validator: [
+    { key: "home", label: "Home", icon: "home", screen: "HomeAdmin" },
+    { key: "news", label: "News", icon: "file-text", screen: "NewsScreen" },
+    { key: "rider", label: "Rider", icon: "users", screen: "RiderScreen", params: { view: "normal" } },
+    { key: "profile", label: "Profile", icon: "user", screen: "Me" },
+  ],
+  inspector: [
+    { key: "home", label: "Home", icon: "home", screen: "HomeAdmin" },
+    { key: "appt", label: "Appointment", icon: "calendar", screen: "AdminAppointment" },
+    { key: "inspect", label: "Rider", icon: "search", screen: "RiderScreen", params: { view: "inspect" } },
+    { key: "profile", label: "Profile", icon: "user", screen: "Me" },
+  ],
+  unknown: [
+    { key: "home", label: "Home", icon: "home", screen: "HomeAdmin" },
+    { key: "profile", label: "Profile", icon: "user", screen: "Me" },
+  ],
+};
 
 // Google Cloud Vision API - AUTOMATIC PLATE DETECTION
 const detectPlateFromImage = async (imageUri) => {
@@ -194,13 +262,11 @@ const detectPlateFromImage = async (imageUri) => {
     console.log('🔍 Starting Cloud Vision OCR...');
     const API_KEY = 'AIzaSyDzd_KY3Lb1_U8QjkonSQsT9NXoyB6mulw';
 
-
     console.log('📖 Reading image file...');
     const base64 = await FileSystem.readAsStringAsync(imageUri, {
       encoding: FileSystem.EncodingType.Base64
     });
     console.log('✅ Image read, size:', base64.length, 'bytes');
-
 
     console.log('📤 Sending to Cloud Vision API...');
     const requestBody = {
@@ -212,7 +278,6 @@ const detectPlateFromImage = async (imageUri) => {
       ]
     };
 
-
     const response = await fetch(
       `https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`,
       {
@@ -222,10 +287,8 @@ const detectPlateFromImage = async (imageUri) => {
       }
     );
 
-
     console.log('📥 Response status:', response.status);
     const responseText = await response.text();
-
 
     let result;
     try {
@@ -235,19 +298,15 @@ const detectPlateFromImage = async (imageUri) => {
       return null;
     }
 
-
     if (result.error) {
       console.error('❌ Vision API error:', result.error.code, result.error.message);
       return null;
     }
 
-
     if (!result.responses || !result.responses[0]) return null;
-
 
     const response0 = result.responses[0];
     let fullText = '';
-
 
     if (response0.fullTextAnnotation && response0.fullTextAnnotation.text) {
       fullText = response0.fullTextAnnotation.text;
@@ -255,17 +314,14 @@ const detectPlateFromImage = async (imageUri) => {
       fullText = response0.textAnnotations[0].description;
     }
 
-
     console.log('📝 Detected text:', fullText);
     if (!fullText || fullText.trim() === '') return null;
-
 
     const platePatterns = [
       /\d{1,4}[A-Z]{1,3}/gi,
       /[A-Z]{1,3}\s*-?\s*\d{1,4}/gi,
       /[A-Z]{1,3}\d{1,4}/gi
     ];
-
 
     for (const pattern of platePatterns) {
       const matches = fullText.match(pattern);
@@ -276,14 +332,12 @@ const detectPlateFromImage = async (imageUri) => {
           .toUpperCase()
           .trim();
 
-
         if (/^[A-Z0-9]{4,7}$/.test(plateNumber)) {
           console.log('✅ Extracted plate:', plateNumber);
           return plateNumber;
         }
       }
     }
-
 
     return null;
   } catch (error) {
@@ -292,8 +346,10 @@ const detectPlateFromImage = async (imageUri) => {
   }
 };
 
-
 export default function HomeAdmin({ navigation }) {
+  const route = useRoute();
+  const initialRouteTask = resolveAdminTaskFromParams(route?.params || {});
+
   const [plateNumber, setPlateNumber] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedEbike, setSelectedEbike] = useState(null);
@@ -305,41 +361,101 @@ export default function HomeAdmin({ navigation }) {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [userFirstName, setUserFirstName] = useState('Admin');
 
+  // ✅ NEW: Announcements state
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
 
-  // Fetch current user data on component mount
+  const [adminTask, setAdminTask] = useState(() => {
+    return isValidAdminTask(initialRouteTask) ? initialRouteTask : "unknown";
+  });
+
+  useEffect(() => {
+    const rt = resolveAdminTaskFromParams(route?.params || {});
+    if (isValidAdminTask(rt)) setAdminTask(rt);
+  }, [
+    route?.params?.adminTask,
+    route?.params?.adminTaskRole,
+    route?.params?.adminRole,
+    route?.params?.role,
+    route?.params?.position,
+    route?.params?.task,
+    route?.params?.type
+  ]);
+
+  // ✅ NEW: realtime announcements listener
+  useEffect(() => {
+    setAnnouncementsLoading(true);
+
+    const q = query(
+      collection(db, 'announcements'),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setAnnouncements(rows);
+        setAnnouncementsLoading(false);
+      },
+      (err) => {
+        console.error('❌ announcements listen error:', err);
+        setAnnouncementsLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
+          let userData = null;
+
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
 
-
           if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            setUserFirstName(userData.firstName || 'Admin');
+            userData = userDocSnap.data();
           } else {
             const usersRef = collection(db, 'users');
             const q = query(usersRef, where('email', '==', user.email));
             const querySnapshot = await getDocs(q);
 
-
             if (!querySnapshot.empty) {
-              const userDocData = querySnapshot.docs[0].data();
-              setUserFirstName(userDocData.firstName || 'Admin');
+              userData = querySnapshot.docs[0].data();
             }
           }
+
+          if (userData) {
+            setUserFirstName(userData.firstName || 'Admin');
+
+            const taskFromDb = normalizeAdminTask(
+              userData.position || "",
+              userData.adminTaskRole || userData.adminRole || userData.role || userData.userRole || "",
+              userData.adminTask || userData.task || ""
+            );
+
+            setAdminTask((prev) => {
+              const prevNorm = (prev || "").toString().toLowerCase();
+              if (isValidAdminTask(taskFromDb)) return taskFromDb;
+              if (isValidAdminTask(prevNorm)) return prevNorm;
+              return "unknown";
+            });
+          }
         } catch (error) {
-          console.error('Error fetching user first name:', error);
+          console.error('Error fetching user data:', error);
         }
       }
     });
 
-
     return () => unsubscribe();
   }, []);
 
+  const allowedTabs = ADMIN_TABS[adminTask] || ADMIN_TABS.unknown;
 
   const handleQuestionMarkPress = () => {
     Alert.alert(
@@ -348,15 +464,12 @@ export default function HomeAdmin({ navigation }) {
     );
   };
 
-
-  // ✅ Rider uploaded docs (riderRegistrations/{uid}/images)
   const fetchRiderDocuments = async (userId) => {
     try {
       const allDocumentsQuery = query(
         collection(db, 'riderRegistrations', userId, 'images')
       );
       const docsSnapshot = await getDocs(allDocumentsQuery);
-
 
       return docsSnapshot.docs.map(docSnap => {
         const docData = docSnap.data();
@@ -375,14 +488,10 @@ export default function HomeAdmin({ navigation }) {
     }
   };
 
-
-  // ✅ Open details with matched ebike + correct status + full ebike fields
   const openDetails = async ({ userId, userData, matchedEbike = null }) => {
     const riderDocuments = await fetchRiderDocuments(userId);
 
-
     const ebikes = normalizeUserEbikes(userData);
-
 
     let ebike = matchedEbike;
     if (!ebike && userData?.plateNumber) {
@@ -390,14 +499,11 @@ export default function HomeAdmin({ navigation }) {
       ebike = ebikes.find(e => normalizePlate(e?.plateNumber) === p) || null;
     }
 
-
     const ebikeStatus = getEbikeStatus(ebike, userData?.status);
-
 
     setSelectedEbike({
       id: userId,
       userId,
-
 
       firstName: userData?.firstName || '',
       lastName: userData?.lastName || '',
@@ -406,80 +512,57 @@ export default function HomeAdmin({ navigation }) {
       address: userData?.address || 'N/A',
       birthday: userData?.birthday || 'N/A',
 
-
-      // ✅ correct status for the matched ebike
       status: ebikeStatus,
       userStatus: userData?.status || 'Pending',
 
-
-      // rider uploaded documents
       documents: riderDocuments,
-
-
-      // ✅ matched ebike (this is now the main source of ebike info)
       matchedEbike: ebike
     });
-
 
     setDetailsModalVisible(true);
     setPlateNumber('');
   };
 
-
-  // ✅ SEARCH: supports users.plateNumber, users.plateNumbers[], AND scanning users.ebikes[]
   const searchEbike = async (plateRaw) => {
     const plate = normalizePlate(plateRaw);
-
 
     if (!plate) {
       Alert.alert('Error', 'Please enter a plate number');
       return;
     }
 
-
     setSearchLoading(true);
     try {
       console.log('🔎 Searching plate:', plate);
 
-
-      // 1) users.plateNumber
       const q1 = query(collection(db, 'users'), where('plateNumber', '==', plate));
       const s1 = await getDocs(q1);
       if (!s1.empty) {
         const userDoc = s1.docs[0];
         const userData = userDoc.data();
 
-
         const ebikes = normalizeUserEbikes(userData);
         const matched = ebikes.find(e => normalizePlate(e?.plateNumber) === plate) || null;
-
 
         await openDetails({ userId: userDoc.id, userData, matchedEbike: matched });
         return;
       }
 
-
-      // 2) users.plateNumbers array-contains (if used)
       const q2 = query(collection(db, 'users'), where('plateNumbers', 'array-contains', plate));
       const s2 = await getDocs(q2);
       if (!s2.empty) {
         const userDoc = s2.docs[0];
         const userData = userDoc.data();
 
-
         const ebikes = normalizeUserEbikes(userData);
         const matched = ebikes.find(e => normalizePlate(e?.plateNumber) === plate) || null;
-
 
         await openDetails({ userId: userDoc.id, userData, matchedEbike: matched });
         return;
       }
 
-
-      // 3) fallback scan: role Rider -> find inside ebikes[]
       const q3 = query(collection(db, 'users'), where('role', '==', 'Rider'));
       const s3 = await getDocs(q3);
-
 
       let found = null;
       for (const userDoc of s3.docs) {
@@ -492,12 +575,10 @@ export default function HomeAdmin({ navigation }) {
         }
       }
 
-
       if (found) {
         await openDetails(found);
         return;
       }
-
 
       Alert.alert('Not Found', `No e-bike found with plate: ${plate}`);
     } catch (error) {
@@ -508,7 +589,6 @@ export default function HomeAdmin({ navigation }) {
     }
   };
 
-
   const capturePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -517,25 +597,21 @@ export default function HomeAdmin({ navigation }) {
         return;
       }
 
-
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8
       });
 
-
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
         setCapturedImage(imageUri);
         setImageModalVisible(true);
 
-
         console.log('🎥 Photo captured, auto-detecting plate...');
         setDetectionLoading(true);
         const detectedPlate = await detectPlateFromImage(imageUri);
         setDetectionLoading(false);
-
 
         if (detectedPlate) {
           console.log('✨ Plate detected! Searching...');
@@ -554,7 +630,6 @@ export default function HomeAdmin({ navigation }) {
     }
   };
 
-
   const pickPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -563,25 +638,21 @@ export default function HomeAdmin({ navigation }) {
         return;
       }
 
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8
       });
 
-
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
         setCapturedImage(imageUri);
         setImageModalVisible(true);
 
-
         console.log('📸 Photo selected, auto-detecting plate...');
         setDetectionLoading(true);
         const detectedPlate = await detectPlateFromImage(imageUri);
         setDetectionLoading(false);
-
 
         if (detectedPlate) {
           console.log('✨ Plate detected! Searching...');
@@ -600,19 +671,14 @@ export default function HomeAdmin({ navigation }) {
     }
   };
 
-
   const renderDetailsModal = () => {
-    const eb = selectedEbike?.matchedEbike || null; // ✅ MAIN SOURCE OF EBIKE INFO
+    const eb = selectedEbike?.matchedEbike || null;
     const regStatus = eb ? getRegistrationStatusFromEbike(eb) : null;
 
-
-    // ✅ Admin verification images can be inside matched ebike (legacy)
     const adminVerificationImages = Array.isArray(eb?.adminVerificationImages)
       ? eb.adminVerificationImages
       : [];
 
-
-    // ✅ Admin verification docs (new)
     const adminReceipt = Array.isArray(eb?.adminVerificationDocs?.receipt)
       ? eb.adminVerificationDocs.receipt
       : [];
@@ -620,13 +686,11 @@ export default function HomeAdmin({ navigation }) {
       ? eb.adminVerificationDocs.ebikePhotos
       : [];
 
-
     const combinedAdminDocs = [
       ...adminReceipt.map(url => ({ url, type: 'admin_receipt' })),
       ...adminEbikePhotos.map(url => ({ url, type: 'admin_ebike' })),
       ...adminVerificationImages.map(url => ({ url, type: 'verification' })),
     ].filter(x => !!x.url);
-
 
     return (
       <Modal
@@ -644,16 +708,13 @@ export default function HomeAdmin({ navigation }) {
               <Feather name="x" size={28} color={COLORS.TEXT_DARK} />
             </TouchableOpacity>
 
-
             <ScrollView contentContainerStyle={styles.modalScroll}>
               <Text style={styles.modalTitle}>E-Bike Details</Text>
-
 
               {selectedEbike && (
                 <>
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>Rider Information</Text>
-
 
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Name:</Text>
@@ -662,14 +723,12 @@ export default function HomeAdmin({ navigation }) {
                       </Text>
                     </View>
 
-
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Contact:</Text>
                       <Text style={styles.detailValue}>
                         {selectedEbike.contactNumber || 'N/A'}
                       </Text>
                     </View>
-
 
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Email:</Text>
@@ -678,14 +737,12 @@ export default function HomeAdmin({ navigation }) {
                       </Text>
                     </View>
 
-
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Address:</Text>
                       <Text style={styles.detailValue}>
                         {selectedEbike.address || 'N/A'}
                       </Text>
                     </View>
-
 
                     <View style={[styles.detailRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
                       <Text style={styles.detailLabel}>Birthday:</Text>
@@ -695,10 +752,8 @@ export default function HomeAdmin({ navigation }) {
                     </View>
                   </View>
 
-
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>E-Bike Information</Text>
-
 
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Plate:</Text>
@@ -707,14 +762,12 @@ export default function HomeAdmin({ navigation }) {
                       </Text>
                     </View>
 
-
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Brand:</Text>
                       <Text style={styles.detailValue}>
                         {eb?.ebikeBrand || 'N/A'}
                       </Text>
                     </View>
-
 
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Model:</Text>
@@ -723,7 +776,6 @@ export default function HomeAdmin({ navigation }) {
                       </Text>
                     </View>
 
-
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Color:</Text>
                       <Text style={styles.detailValue}>
@@ -731,14 +783,12 @@ export default function HomeAdmin({ navigation }) {
                       </Text>
                     </View>
 
-
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Chassis/Motor:</Text>
                       <Text style={styles.detailValue}>
                         {eb?.chassisMotorNumber || 'N/A'}
                       </Text>
                     </View>
-
 
                     <View style={[styles.detailRow, { paddingBottom: 0, borderBottomWidth: 0 }]}>
                       <Text style={styles.detailLabel}>Branch:</Text>
@@ -748,10 +798,8 @@ export default function HomeAdmin({ navigation }) {
                     </View>
                   </View>
 
-
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>Verification Status</Text>
-
 
                     <View style={[styles.detailRow, { paddingBottom: 0, borderBottomWidth: 0 }]}>
                       <Text style={styles.detailLabel}>Status:</Text>
@@ -771,11 +819,9 @@ export default function HomeAdmin({ navigation }) {
                     </View>
                   </View>
 
-
                   {selectedEbike.status === 'Verified' && eb && (
                     <View style={styles.detailSection}>
                       <Text style={styles.detailSectionTitle}>Registration Information</Text>
-
 
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>E-Bike Category:</Text>
@@ -784,14 +830,12 @@ export default function HomeAdmin({ navigation }) {
                         </Text>
                       </View>
 
-
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Registered:</Text>
                         <Text style={styles.detailValue}>
                           {formatDate(eb.registeredDate)}
                         </Text>
                       </View>
-
 
                       <View style={[styles.detailRow, { paddingBottom: 0, borderBottomWidth: 0 }]}>
                         <Text style={styles.detailLabel}>Renewal Date:</Text>
@@ -802,7 +846,6 @@ export default function HomeAdmin({ navigation }) {
                           {formatDate(eb.renewalDate)}
                         </Text>
                       </View>
-
 
                       {regStatus && (
                         <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
@@ -817,7 +860,6 @@ export default function HomeAdmin({ navigation }) {
                         </View>
                       )}
 
-
                       {eb.paymentDetails && (
                         <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
                           <Text style={styles.detailLabel}>Payment:</Text>
@@ -829,14 +871,11 @@ export default function HomeAdmin({ navigation }) {
                     </View>
                   )}
 
-
-                  {/* Rider uploaded documents */}
                   {selectedEbike.documents && selectedEbike.documents.length > 0 && (
                     <View style={styles.detailSection}>
                       <Text style={styles.detailSectionTitle}>
                         📄 Rider Documents ({selectedEbike.documents.length})
                       </Text>
-
 
                       <ScrollView
                         horizontal
@@ -874,14 +913,11 @@ export default function HomeAdmin({ navigation }) {
                     </View>
                   )}
 
-
-                  {/* Admin verification docs (from matched ebike) */}
                   {combinedAdminDocs.length > 0 && (
                     <View style={styles.detailSection}>
                       <Text style={styles.detailSectionTitle}>
                         ✅ Admin Verification ({combinedAdminDocs.length})
                       </Text>
-
 
                       <ScrollView
                         horizontal
@@ -917,7 +953,6 @@ export default function HomeAdmin({ navigation }) {
     );
   };
 
-
   const renderDocumentFullScreen = () => (
     <Modal
       animationType="fade"
@@ -932,7 +967,6 @@ export default function HomeAdmin({ navigation }) {
         >
           <Feather name="x" size={28} color="white" />
         </TouchableOpacity>
-
 
         {selectedDocument && (
           <>
@@ -957,7 +991,6 @@ export default function HomeAdmin({ navigation }) {
       </View>
     </Modal>
   );
-
 
   const renderImageModal = () => (
     <Modal
@@ -996,27 +1029,6 @@ export default function HomeAdmin({ navigation }) {
     </Modal>
   );
 
-
-  const BINAN_MAPS_EMBED = `
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body, html { margin: 0; padding: 0; overflow: hidden; }
-          iframe { width: 100%; height: 100%; border: none; }
-        </style>
-      </head>
-      <body>
-        <iframe
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d61856.07421696857!2d121.03201051994674!3d14.311163205767722!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397d70cc905e489%3A0xdbb7938dd87f5563!2zQsprog6FuLCBMYWd1bmE!5e0!3m2!1sen!2sph!4v1764121213329!5m2!1sen!2sph"
-          width="100%" height="100%" style="border:0;"
-          allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade">
-        </iframe>
-      </body>
-    </html>
-  `;
-
-
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -1026,10 +1038,8 @@ export default function HomeAdmin({ navigation }) {
         >
           <Text style={styles.greeting}>Hi, {userFirstName}</Text>
 
-
           <View style={styles.searchContainer}>
             <Text style={styles.searchLabel}>Search E-bike</Text>
-
 
             <View style={styles.searchInputContainer}>
               <TextInput
@@ -1059,7 +1069,6 @@ export default function HomeAdmin({ navigation }) {
               </TouchableOpacity>
             </View>
 
-
             <View style={styles.cameraButtonContainer}>
               <TouchableOpacity
                 style={styles.cameraButton}
@@ -1069,7 +1078,6 @@ export default function HomeAdmin({ navigation }) {
                 <Feather name="camera" size={18} color="white" />
                 <Text style={styles.cameraButtonText}>Capture Photo</Text>
               </TouchableOpacity>
-
 
               <TouchableOpacity
                 style={[styles.cameraButton, { backgroundColor: '#2196F3' }]}
@@ -1082,72 +1090,95 @@ export default function HomeAdmin({ navigation }) {
             </View>
           </View>
 
-
-          <TouchableOpacity style={styles.greenRouteCard}>
-            <View style={styles.mapPreviewContainer}>
-              <View style={styles.mapPreviewHeader}>
-                <Text style={styles.mapPreviewTitle}>Green Routes in Binan</Text>
-              </View>
-
-
-              <View style={styles.mapWrapper}>
-                <WebView
-                  source={{ html: BINAN_MAPS_EMBED }}
-                  style={styles.webview}
-                  javaScriptEnabled={true}
-                  domStorageEnabled={true}
-                  startInLoadingState={true}
-                />
+          {/* ✅ REPLACEMENT: Posted Announcements */}
+          <View style={styles.announcementsWrap}>
+            <View style={styles.annHeaderRow}>
+              <Text style={styles.annTitle}>Posted Announcements</Text>
+              <View style={styles.annBadge}>
+                <Text style={styles.annBadgeText}>{announcements.length}</Text>
               </View>
             </View>
-          </TouchableOpacity>
 
+            {announcementsLoading ? (
+              <View style={styles.annLoading}>
+                <ActivityIndicator size="small" color={COLORS.PRIMARY_GREEN} />
+                <Text style={styles.annLoadingText}>Loading announcements...</Text>
+              </View>
+            ) : announcements.length === 0 ? (
+              <View style={styles.emptyAnnCard}>
+                <Text style={styles.emptyAnnText}>No announcements posted yet.</Text>
+              </View>
+            ) : (
+              announcements.map((a) => {
+                const title = a?.title || a?.subject || a?.announcementTitle || 'Announcement';
+                const body =
+                  a?.message ||
+                  a?.content ||
+                  a?.body ||
+                  a?.description ||
+                  a?.text ||
+                  '';
 
-          <TouchableOpacity
-            style={styles.openMapButton}
-            onPress={() => navigation.navigate('AdminMap')}
-          >
-            <Text style={styles.openMapText}>Open Full Map</Text>
-          </TouchableOpacity>
+                const dateText =
+                  formatDateTime(a?.createdAt || a?.timestamp || a?.datePosted) || '';
+
+                const imageUrl = a?.imageUrl || a?.image || a?.photoUrl || a?.coverUrl || null;
+
+                return (
+                  <View key={a.id} style={styles.annCard}>
+                    <View style={styles.annCardTop}>
+                      <Text style={styles.annCardTitle} numberOfLines={2}>{title}</Text>
+                      {!!dateText && <Text style={styles.annCardDate}>{dateText}</Text>}
+                    </View>
+
+                    {!!body && (
+                      <Text style={styles.annCardBody}>
+                        {body}
+                      </Text>
+                    )}
+
+                    {!!imageUrl && (
+                      <Image
+                        source={{ uri: imageUrl }}
+                        style={styles.annImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
         </ScrollView>
       </SafeAreaView>
 
-
+      {/* ✅ DYNAMIC BOTTOM BAR based on adminTask */}
       <View style={[styles.bottomBar, { height: BOTTOM_BAR_HEIGHT }]}>
         <SafeAreaView style={styles.bottomSafe}>
           <View style={[styles.bottomInner, { height: BOTTOM_BAR_HEIGHT }]}>
-            <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("HomeAdmin")}>
-              <Feather name="home" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Home</Text>
-            </TouchableOpacity>
-
-
-            <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("NewsScreen")}>
-              <Feather name="file-text" size={24} color="white" />
-              <Text style={styles.bottomBarText}>News</Text>
-            </TouchableOpacity>
-
-
-            <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("RiderScreen")}>
-              <Feather name="users" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Rider</Text>
-            </TouchableOpacity>
-
-
-            <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("AdminAppointment")}>
-              <Feather name="calendar" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Appointment</Text>
-            </TouchableOpacity>
-
-
-            <TouchableOpacity style={styles.bottomBarItem} onPress={() => navigation.navigate("Me")}>
-              <Feather name="user" size={24} color="white" />
-              <Text style={styles.bottomBarText}>Profile</Text>
-            </TouchableOpacity>
+            {allowedTabs.map((t) => (
+              <TouchableOpacity
+                key={t.key}
+                style={styles.bottomBarItem}
+                onPress={() =>
+                  navigation.navigate({
+                    name: t.screen,
+                    params: {
+                      adminTask,
+                      adminTaskRole: adminTask,
+                      ...(t.params || {})
+                    },
+                    merge: false
+                  })
+                }
+              >
+                <Feather name={t.icon} size={24} color="white" />
+                <Text style={styles.bottomBarText}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </SafeAreaView>
       </View>
-
 
       {renderDetailsModal()}
       {renderDocumentFullScreen()}
@@ -1156,40 +1187,16 @@ export default function HomeAdmin({ navigation }) {
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND_WHITE
-  },
-  safeArea: {
-    flex: 1
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 100
-  },
-  greeting: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: COLORS.TEXT_DARK,
-    marginBottom: 20
-  },
-  searchContainer: {
-    marginBottom: 20
-  },
-  searchLabel: {
-    fontSize: 16,
-    marginBottom: 10,
-    color: COLORS.TEXT_DARK,
-    fontWeight: '600'
-  },
-  searchInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 12
-  },
+  container: { flex: 1, backgroundColor: COLORS.BACKGROUND_WHITE },
+  safeArea: { flex: 1 },
+  content: { padding: 20, paddingBottom: 110 },
+
+  greeting: { fontSize: 40, fontWeight: '700', color: COLORS.TEXT_DARK, marginBottom: 20 },
+
+  searchContainer: { marginBottom: 18 },
+  searchLabel: { fontSize: 16, marginBottom: 10, color: COLORS.TEXT_DARK, fontWeight: '600' },
+  searchInputContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   searchInput: {
     flex: 1,
     backgroundColor: 'white',
@@ -1214,10 +1221,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  cameraButtonContainer: {
-    flexDirection: 'row',
-    gap: 10
-  },
+  cameraButtonContainer: { flexDirection: 'row', gap: 10 },
   cameraButton: {
     flex: 1,
     flexDirection: 'row',
@@ -1228,58 +1232,90 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 6
   },
-  cameraButtonText: {
-    color: 'white',
-    fontSize: 13,
+  cameraButtonText: { color: 'white', fontSize: 13, fontWeight: '600' },
+
+  // ✅ Announcements UI
+  announcementsWrap: {
+    marginTop: 6,
+    paddingTop: 4
+  },
+  annHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  annTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.TEXT_DARK
+  },
+  annBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999
+  },
+  annBadgeText: {
+    color: COLORS.PRIMARY_GREEN,
+    fontWeight: '800'
+  },
+  annLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14
+  },
+  annLoadingText: {
+    color: COLORS.TEXT_LIGHT,
     fontWeight: '600'
   },
-  greenRouteCard: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+  emptyAnnCard: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#E0E0E0'
   },
-  mapPreviewContainer: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    overflow: 'hidden'
+  emptyAnnText: {
+    color: COLORS.TEXT_LIGHT,
+    fontWeight: '600'
   },
-  mapPreviewHeader: {
-    padding: 15,
-    paddingBottom: 0
+  annCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginBottom: 12
   },
-  mapPreviewTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2E7D32'
+  annCardTop: {
+    marginBottom: 8
   },
-  mapWrapper: {
-    height: 400,
-    width: '100%'
-  },
-  webview: {
-    flex: 1
-  },
-  openMapButton: {
-    backgroundColor: '#0ea548ff',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  openMapText: {
-    color: '#fff',
+  annCardTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: COLORS.TEXT_DARK
   },
+  annCardDate: {
+    marginTop: 4,
+    fontSize: 12,
+    color: COLORS.TEXT_LIGHT,
+    fontWeight: '600'
+  },
+  annCardBody: {
+    color: COLORS.TEXT_DARK,
+    fontSize: 14,
+    lineHeight: 20
+  },
+  annImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 10,
+    marginTop: 10,
+    backgroundColor: '#F2F2F2'
+  },
+
   bottomBar: {
     backgroundColor: COLORS.BOTTOM_BAR_GREEN,
     borderTopLeftRadius: 20,
@@ -1289,175 +1325,36 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0
   },
-  bottomSafe: {
-    flex: 1
-  },
-  bottomInner: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center'
-  },
-  bottomBarItem: {
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  bottomBarText: {
-    color: 'white',
-    fontSize: 12,
-    marginTop: 5
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)'
-  },
-  modalContent: {
-    width: '90%',
-    maxHeight: '90%',
-    backgroundColor: 'white',
-    borderRadius: 15,
-    overflow: 'hidden'
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 10,
-    backgroundColor: '#F0F0F0',
-    borderRadius: 50,
-    padding: 8
-  },
-  modalScroll: {
-    padding: 20,
-    paddingTop: 50
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: COLORS.TEXT_DARK,
-    marginBottom: 20
-  },
-  detailSection: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15
-  },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.TEXT_DARK,
-    marginBottom: 12
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0'
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.TEXT_LIGHT,
-    flex: 1
-  },
-  detailValue: {
-    fontSize: 14,
-    color: COLORS.TEXT_DARK,
-    flex: 1,
-    textAlign: 'right'
-  },
-  documentsScroll: {
-    marginHorizontal: -15,
-    paddingHorizontal: 15,
-    marginTop: 10
-  },
-  documentThumbnail: {
-    marginRight: 10,
-    borderRadius: 8,
-    overflow: 'hidden',
-    position: 'relative'
-  },
-  documentThumb: {
-    width: 100,
-    height: 100,
-    borderRadius: 8
-  },
-  documentPlaceholder: {
-    backgroundColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  placeholderText: {
-    fontSize: 12,
-    color: '#999',
-    fontWeight: '600',
-    textAlign: 'center'
-  },
-  documentTypeLabel: {
-    position: 'absolute',
-    bottom: 5,
-    right: 5,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4
-  },
-  documentTypeText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  imageModalContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    flex: 1
-  },
-  loadingText: {
-    color: 'white',
-    marginTop: 15,
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  imageCloseButton: {
-    position: 'absolute',
-    top: 40,
-    right: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 50,
-    padding: 10
-  },
-  fullImage: {
-    width: '100%',
-    height: '100%'
-  },
-  documentInfoOverlay: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8
-  },
-  documentInfoText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center'
-  }
+  bottomSafe: { flex: 1 },
+  bottomInner: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  bottomBarItem: { alignItems: 'center', justifyContent: 'center' },
+  bottomBarText: { color: 'white', fontSize: 12, marginTop: 5 },
+
+  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  modalContent: { width: '90%', maxHeight: '90%', backgroundColor: 'white', borderRadius: 15, overflow: 'hidden' },
+  modalCloseButton: { position: 'absolute', top: 15, right: 15, zIndex: 10, backgroundColor: '#F0F0F0', borderRadius: 50, padding: 8 },
+  modalScroll: { padding: 20, paddingTop: 50 },
+  modalTitle: { fontSize: 24, fontWeight: '700', color: COLORS.TEXT_DARK, marginBottom: 20 },
+
+  detailSection: { backgroundColor: '#F5F5F5', borderRadius: 10, padding: 15, marginBottom: 15 },
+  detailSectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.TEXT_DARK, marginBottom: 12 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
+  detailLabel: { fontSize: 14, fontWeight: '600', color: COLORS.TEXT_LIGHT, flex: 1 },
+  detailValue: { fontSize: 14, color: COLORS.TEXT_DARK, flex: 1, textAlign: 'right' },
+
+  documentsScroll: { marginHorizontal: -15, paddingHorizontal: 15, marginTop: 10 },
+  documentThumbnail: { marginRight: 10, borderRadius: 8, overflow: 'hidden', position: 'relative' },
+  documentThumb: { width: 100, height: 100, borderRadius: 8 },
+  documentPlaceholder: { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' },
+  placeholderText: { fontSize: 12, color: '#999', fontWeight: '600', textAlign: 'center' },
+  documentTypeLabel: { position: 'absolute', bottom: 5, right: 5, backgroundColor: 'rgba(0, 0, 0, 0.7)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 },
+  documentTypeText: { color: 'white', fontSize: 14, fontWeight: '600' },
+
+  imageModalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: { justifyContent: 'center', alignItems: 'center', flex: 1 },
+  loadingText: { color: 'white', marginTop: 15, fontSize: 16, fontWeight: '600' },
+  imageCloseButton: { position: 'absolute', top: 40, right: 20, zIndex: 10, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 50, padding: 10 },
+  fullImage: { width: '100%', height: '100%' },
+  documentInfoOverlay: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
+  documentInfoText: { color: 'white', fontSize: 14, fontWeight: '600', textAlign: 'center' }
 });
-
-
-

@@ -1,3 +1,4 @@
+// HomeRider.js
 import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
@@ -28,7 +29,8 @@ import {
   getDocs,
   orderBy,
   where,
-  runTransaction
+  runTransaction,
+  onSnapshot // ✅ ADD
 } from "firebase/firestore";
 
 // Static Assets
@@ -91,6 +93,20 @@ const formatDate = (dateValue) => {
   }
 };
 
+// ✅ For notifications: date+time (optional)
+const formatDateTime = (dateValue) => {
+  if (!dateValue) return "N/A";
+  const d = toJSDate(dateValue);
+  if (!d) return "Invalid Date";
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+
 const getRegistrationStatusFromEbike = (ebike) => {
   if (!ebike?.renewalDate) return null;
 
@@ -135,6 +151,7 @@ const normalizeUserEbikes = (userData) => {
       renewalDate: e?.renewalDate || null,
       registrationStatus: e?.registrationStatus || null,
       verifiedAt: e?.verifiedAt || null,
+      rejectedAt: e?.rejectedAt || null,
 
       // new docs schema
       adminVerificationDocs: e?.adminVerificationDocs || null,
@@ -168,6 +185,7 @@ const normalizeUserEbikes = (userData) => {
       renewalDate: userData?.renewalDate || null,
       registrationStatus: userData?.registrationStatus || null,
       verifiedAt: userData?.verifiedAt || null,
+      rejectedAt: userData?.rejectedAt || null,
 
       adminVerificationDocs: userData?.adminVerificationDocs || null,
       transactionHistory: Array.isArray(userData?.transactionHistory) ? userData.transactionHistory : [],
@@ -231,6 +249,7 @@ export default function HomeRider({ navigation }) {
     plateNumber: ""
   });
 
+  // ✅ Existing announcements
   const [newsUpdates, setNewsUpdates] = useState([
     {
       headline: "Welcome to AIDE",
@@ -240,6 +259,10 @@ export default function HomeRider({ navigation }) {
     }
   ]);
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
+
+  // ✅ NEW: system notifications (Appointment + Verification)
+  const [systemNotifs, setSystemNotifs] = useState([]);
+  const [notifBadgeCount, setNotifBadgeCount] = useState(0);
 
   const auth = getAuth();
   const db = getFirestore();
@@ -629,6 +652,232 @@ export default function HomeRider({ navigation }) {
     return `E-bike ${idx + 1}: ${plate}${brand}`;
   };
 
+  // ✅ NEW: build system notifications (Appointment + Verification)
+  const norm = (v) => String(v || "").trim().toLowerCase();
+  const isAccepted = (s) => ["accepted", "approved", "confirmed"].includes(norm(s));
+  const isRejected = (s) => ["rejected", "declined", "cancelled", "canceled"].includes(norm(s));
+
+  // ✅ If your appointment fields are different, edit these 2 functions only
+  const getApptStatus = (a) =>
+    a?.status || a?.appointmentStatus || a?.approvalStatus || a?.state || ""; // ✅ EDIT IF NEEDED
+  const getApptDate = (a) =>
+    a?.appointmentDate ||
+    a?.date ||
+    a?.scheduleDate ||
+    a?.selectedDate ||
+    a?.slotDate ||
+    a?.createdAt ||
+    null; // ✅ EDIT IF NEEDED
+
+  const getApptPlate = (a) => a?.plateNumber || a?.ebikePlate || a?.plate || "";
+  const getApptReason = (a) =>
+    a?.reason ||
+    a?.rejectionReason ||
+    a?.note ||
+    a?.remarks ||
+    "";
+
+  const ms = (v) => {
+    const d = toJSDate(v);
+    return d ? d.getTime() : 0;
+  };
+
+  // ✅ REALTIME listeners: user status + appointments
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !userDocId) return;
+
+    let latestUser = null;
+    const apptBuckets = {}; // each query key -> docs array
+    let unsubUser = null;
+    const unsubs = [];
+
+    const recomputeSystemNotifs = () => {
+      const user = latestUser;
+      const allApptsRaw = Object.values(apptBuckets).flat();
+
+      // de-dupe appointments by id
+      const apptMap = new Map();
+      allApptsRaw.forEach((a) => {
+        if (!a?.id) return;
+        if (!apptMap.has(a.id)) apptMap.set(a.id, a);
+      });
+      const appts = Array.from(apptMap.values());
+
+      const list = [];
+
+      // 1) Verification notifications (overall + per-ebike)
+      if (user) {
+        const overall = user?.status || "";
+        const overallNorm = norm(overall);
+
+        if (overallNorm === "verified") {
+          list.push({
+            id: "user_verified",
+            headline: "Account Verified",
+            details: "Your registration has been verified by the admin.",
+            type: "Verification",
+            _sort: ms(user?.verifiedAt) || ms(user?.updatedAt) || Date.now(),
+            createdAt: formatDateTime(user?.verifiedAt || user?.updatedAt || new Date())
+          });
+        } else if (overallNorm === "rejected") {
+          list.push({
+            id: "user_rejected",
+            headline: "Account Rejected",
+            details: "Your registration has been rejected. Please check your details and resubmit if needed.",
+            type: "Verification",
+            _sort: ms(user?.rejectedAt) || ms(user?.updatedAt) || Date.now(),
+            createdAt: formatDateTime(user?.rejectedAt || user?.updatedAt || new Date())
+          });
+        }
+
+        const eb = normalizeUserEbikes(user);
+        eb.forEach((e) => {
+          const s = norm(e?.status);
+          if (s === "verified") {
+            const plate = e?.plateNumber ? String(e.plateNumber).toUpperCase() : "NO PLATE";
+            list.push({
+              id: `ebike_verified_${String(e.id)}`,
+              headline: "E-bike Registration Verified",
+              details: `E-bike: ${plate} has been verified.`,
+              type: "Verification",
+              _sort: ms(e?.verifiedAt) || ms(e?.paymentDetails?.verifiedAt) || ms(e?.updatedAt) || Date.now(),
+              createdAt: formatDateTime(
+                e?.verifiedAt || e?.paymentDetails?.verifiedAt || e?.updatedAt || new Date()
+              )
+            });
+          } else if (s === "rejected") {
+            const plate = e?.plateNumber ? String(e.plateNumber).toUpperCase() : "NO PLATE";
+            list.push({
+              id: `ebike_rejected_${String(e.id)}`,
+              headline: "E-bike Registration Rejected",
+              details: `E-bike: ${plate} has been rejected.`,
+              type: "Verification",
+              _sort: ms(e?.rejectedAt) || ms(e?.updatedAt) || Date.now(),
+              createdAt: formatDateTime(e?.rejectedAt || e?.updatedAt || new Date())
+            });
+          }
+        });
+      }
+
+      // 2) Appointment notifications (accepted/rejected)
+      appts.forEach((a) => {
+        const st = getApptStatus(a);
+        if (!isAccepted(st) && !isRejected(st)) return;
+
+        const plate = getApptPlate(a);
+        const when = getApptDate(a);
+        const reason = getApptReason(a);
+
+        const label = isAccepted(st) ? "Accepted" : "Rejected";
+        const headline = `Appointment ${label}`;
+        const detailsParts = [];
+
+        if (when) detailsParts.push(`Schedule: ${formatDateTime(when)}`);
+        if (plate) detailsParts.push(`E-bike: ${String(plate).toUpperCase()}`);
+        if (isRejected(st) && reason) detailsParts.push(`Reason: ${reason}`);
+
+        list.push({
+          id: `appt_${a.id}`,
+          headline,
+          details: detailsParts.length ? detailsParts.join(" • ") : "Your appointment status has been updated.",
+          type: "Appointment",
+          _sort: ms(a?.updatedAt) || ms(a?.statusUpdatedAt) || ms(when) || ms(a?.createdAt) || Date.now(),
+          createdAt: formatDateTime(a?.updatedAt || a?.statusUpdatedAt || when || a?.createdAt || new Date())
+        });
+      });
+
+      // sort latest first
+      list.sort((a, b) => (b._sort || 0) - (a._sort || 0));
+
+      setSystemNotifs(list);
+      setNotifBadgeCount(list.length);
+    };
+
+    // ✅ user doc realtime (keeps userData fresh + notif)
+    unsubUser = onSnapshot(
+      doc(db, "users", userDocId),
+      async (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const eb = normalizeUserEbikes(data);
+
+        // keep your UI updated too
+        setUserData({ ...data, _id: userDocId, ebikes: eb });
+
+        // keep selected ebike valid
+        if (eb.length > 0) {
+          const stillExists = eb.some((x) => String(x.id) === String(selectedEbikeId));
+          if (!selectedEbikeId || !stillExists) setSelectedEbikeId(eb[0].id);
+        }
+
+        latestUser = { ...data, _id: userDocId, ebikes: eb };
+
+        // ensure docs are loaded once (optional, safe)
+        // (do not spam: only if currently none and not loading)
+        if (!docsLoading && riderDocs.length === 0) {
+          try {
+            await loadRiderDocuments(userDocId);
+          } catch {}
+        }
+
+        recomputeSystemNotifs();
+      },
+      (err) => {
+        console.error("User onSnapshot error:", err);
+      }
+    );
+
+    // ✅ appointments realtime (supports different field names by multiple listeners)
+    const addApptListener = (field, value) => {
+      try {
+        const qy = query(collection(db, "appointments"), where(field, "==", value));
+        const unsub = onSnapshot(
+          qy,
+          (qs) => {
+            apptBuckets[field] = qs.docs.map((d) => ({ id: d.id, ...d.data() }));
+            recomputeSystemNotifs();
+          },
+          (err) => {
+            console.error(`Appointments onSnapshot error (${field}):`, err);
+          }
+        );
+        return unsub;
+      } catch (e) {
+        console.error("addApptListener failed:", e);
+        return null;
+      }
+    };
+
+    // try common keys (safe kahit wala sa schema—just returns empty)
+    const uid = currentUser.uid;
+    const email = currentUser.email || "";
+
+    [
+      ["riderUid", uid],
+      ["uid", uid],
+      ["userId", uid],
+      ["riderId", uid],
+      ["accountUid", uid],
+      ["riderEmail", email],
+      ["email", email],
+      ["userDocId", userDocId],
+      ["riderDocId", userDocId]
+    ].forEach(([field, value]) => {
+      if (!value) return;
+      const u = addApptListener(field, value);
+      if (u) unsubs.push(u);
+    });
+
+    return () => {
+      if (typeof unsubUser === "function") unsubUser();
+      unsubs.forEach((u) => {
+        if (typeof u === "function") u();
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userDocId]);
+
   const renderEbikePickerModal = () => {
     return (
       <Modal
@@ -992,22 +1241,7 @@ export default function HomeRider({ navigation }) {
 
               {/* ✅ E-bike Information (per selected e-bike) */}
               <View style={styles.detailSection}>
-                {/* ✅ TITLE LEFT + BUTTON RIGHT (same line) */}
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>
-                    E-Bike Information
-                  </Text>
-
-                  <TouchableOpacity
-                    style={[styles.addNewEbikeBtn, styles.addNewEbikeBtnInline]}
-                    onPress={() => {
-                      resetAddEbikeForm();
-                      setAddEbikeVisible(true);
-                    }}
-                  >
-                    <Text style={styles.addNewEbikeBtnText}>+ Add New E-Bike</Text>
-                  </TouchableOpacity>
-                </View>
+                <Text style={styles.sectionTitle}>E-Bike Information</Text>
 
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Plate Number</Text>
@@ -1146,7 +1380,9 @@ export default function HomeRider({ navigation }) {
                 {/* Rider Uploaded Documents */}
                 {!docsLoading && riderDocs.length > 0 && (
                   <>
-                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Rider Uploaded Documents</Text>
+                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
+                      Rider Uploaded Documents
+                    </Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
                       {riderDocs.map((d) => (
                         <TouchableOpacity
@@ -1162,7 +1398,9 @@ export default function HomeRider({ navigation }) {
                             </View>
                           )}
                           <View style={styles.docTypeBadge}>
-                            <Text style={styles.docTypeBadgeText}>{d.type === "original" ? "📝" : "✅"}</Text>
+                            <Text style={styles.docTypeBadgeText}>
+                              {d.type === "original" ? "📝" : "✅"}
+                            </Text>
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -1173,7 +1411,9 @@ export default function HomeRider({ navigation }) {
                 {/* Admin Verification (Legacy) */}
                 {!docsLoading && legacyAdminImgs.length > 0 && (
                   <>
-                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Admin Verification (Legacy)</Text>
+                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
+                      Admin Verification (Legacy)
+                    </Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
                       {legacyAdminImgs.map((url, index) => (
                         <TouchableOpacity
@@ -1240,7 +1480,10 @@ export default function HomeRider({ navigation }) {
                             <Text style={styles.auditSubTitle}>Photo of the Receipt</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                               {rec.map((url, i) => (
-                                <TouchableOpacity key={`r_${idx}_${i}`} onPress={() => Linking.openURL(url)}>
+                                <TouchableOpacity
+                                  key={`r_${idx}_${i}`}
+                                  onPress={() => Linking.openURL(url)}
+                                >
                                   <Image source={{ uri: url }} style={styles.auditThumb} />
                                 </TouchableOpacity>
                               ))}
@@ -1253,7 +1496,10 @@ export default function HomeRider({ navigation }) {
                             <Text style={styles.auditSubTitle}>E-bike Photo</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                               {ebp.map((url, i) => (
-                                <TouchableOpacity key={`e_${idx}_${i}`} onPress={() => Linking.openURL(url)}>
+                                <TouchableOpacity
+                                  key={`e_${idx}_${i}`}
+                                  onPress={() => Linking.openURL(url)}
+                                >
                                   <Image source={{ uri: url }} style={styles.auditThumb} />
                                 </TouchableOpacity>
                               ))}
@@ -1265,6 +1511,17 @@ export default function HomeRider({ navigation }) {
                   })
                 )}
               </View>
+
+              {/* ✅✅✅ ADD NEW E-BIKE BUTTON — PINAKA BABA (LAST ITEM) */}
+              <TouchableOpacity
+                style={styles.addNewEbikeBtn}
+                onPress={() => {
+                  resetAddEbikeForm();
+                  setAddEbikeVisible(true);
+                }}
+              >
+                <Text style={styles.addNewEbikeBtnText}>+ Add New E-Bike</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -1286,19 +1543,50 @@ export default function HomeRider({ navigation }) {
               <Text style={styles.modalCloseText}>✕</Text>
             </TouchableOpacity>
 
-            <Text style={[styles.modalTitle, { marginBottom: 10 }]}>Announcements & Updates</Text>
+            <Text style={[styles.modalTitle, { marginBottom: 10 }]}>Notifications</Text>
 
-            {newsUpdates.length === 0 ? (
-              <Text style={styles.emptyDocsText}>No announcements yet.</Text>
+            {/* ✅ NEW: Appointment + Verification */}
+            {systemNotifs.length === 0 ? (
+              <Text style={styles.emptyDocsText}>No new notifications yet.</Text>
             ) : (
-              <ScrollView contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
-                {newsUpdates.map((item) => (
-                  <View key={item.id || item.headline} style={styles.notifItem}>
-                    <Text style={styles.notifHeadline}>{item.headline}</Text>
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 16 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {systemNotifs.map((item) => (
+                  <View key={item.id} style={styles.notifItem}>
+                    <View style={styles.notifHeaderRow}>
+                      <Text style={styles.notifHeadline}>{item.headline}</Text>
+                      <View style={styles.notifTypePill}>
+                        <Text style={styles.notifTypeText}>{item.type || "Update"}</Text>
+                      </View>
+                    </View>
                     <Text style={styles.notifDetails}>{item.details}</Text>
                     <Text style={styles.notifDate}>{item.createdAt}</Text>
                   </View>
                 ))}
+
+                {/* ✅ Divider */}
+                <View style={styles.notifDivider} />
+
+                <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Announcements & Updates</Text>
+
+                {newsUpdates.length === 0 ? (
+                  <Text style={styles.emptyDocsText}>No announcements yet.</Text>
+                ) : (
+                  newsUpdates.map((item) => (
+                    <View key={item.id || item.headline} style={styles.notifItem}>
+                      <View style={styles.notifHeaderRow}>
+                        <Text style={styles.notifHeadline}>{item.headline}</Text>
+                        <View style={styles.notifTypePill}>
+                          <Text style={styles.notifTypeText}>{item.type || "Announcement"}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.notifDetails}>{item.details}</Text>
+                      <Text style={styles.notifDate}>{item.createdAt}</Text>
+                    </View>
+                  ))
+                )}
               </ScrollView>
             )}
           </View>
@@ -1312,8 +1600,17 @@ export default function HomeRider({ navigation }) {
       {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>AIDE</Text>
-        <Pressable onPress={() => setNotifVisible(true)}>
+
+        {/* ✅ Bell with badge */}
+        <Pressable onPress={() => setNotifVisible(true)} style={styles.bellWrap}>
           <Image source={BellIcon} style={styles.headerIcon} resizeMode="contain" />
+          {notifBadgeCount > 0 && (
+            <View style={styles.bellBadge}>
+              <Text style={styles.bellBadgeText}>
+                {notifBadgeCount > 9 ? "9+" : String(notifBadgeCount)}
+              </Text>
+            </View>
+          )}
         </Pressable>
       </View>
 
@@ -1414,6 +1711,22 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 20, fontWeight: "700", color: "#2E7D32" },
   headerIcon: { width: 24, height: 24, tintColor: "#2E7D32" },
+
+  // ✅ Bell badge
+  bellWrap: { position: "relative", padding: 4 },
+  bellBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#E53935",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4
+  },
+  bellBadgeText: { color: "#FFF", fontSize: 11, fontWeight: "900" },
 
   greetingSection: { paddingHorizontal: 20, paddingVertical: 15 },
   welcomeText: { fontSize: 22, fontWeight: "600", color: "#2E7D32" },
@@ -1536,14 +1849,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 8, color: "#2C3E50" },
 
-  /* ✅ NEW: header row for section title + right button */
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8
-  },
-
   detailRow: { flexDirection: "row", marginBottom: 6 },
   detailLabel: { width: "40%", fontSize: 13, fontWeight: "600", color: "#7F8C8D" },
   detailValue: { width: "60%", fontSize: 13, color: "#2C3E50", flexWrap: "wrap" },
@@ -1595,9 +1900,26 @@ const styles = StyleSheet.create({
 
   /* 🔔 Notification item styles */
   notifItem: { backgroundColor: "#F5F5F5", borderRadius: 10, padding: 12, marginBottom: 10 },
-  notifHeadline: { fontSize: 15, fontWeight: "700", color: "#2C3E50", marginBottom: 4 },
+  notifHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  notifHeadline: { fontSize: 15, fontWeight: "700", color: "#2C3E50", marginBottom: 4, flex: 1, paddingRight: 8 },
   notifDetails: { fontSize: 13, color: "#555", marginBottom: 6 },
   notifDate: { fontSize: 11, color: "#888", textAlign: "right" },
+
+  notifTypePill: {
+    backgroundColor: "#E6F3EC",
+    borderWidth: 1,
+    borderColor: "#2E7D32",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999
+  },
+  notifTypeText: { fontSize: 11, fontWeight: "900", color: "#2E7D32" },
+
+  notifDivider: {
+    height: 1,
+    backgroundColor: "#E0E0E0",
+    marginVertical: 10
+  },
 
   /* ✅ HISTORY STYLES */
   auditHint: { fontSize: 12, color: "#7F8C8D", marginBottom: 10 },
@@ -1609,13 +1931,24 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12
   },
-  auditHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  auditHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
+  },
   auditTitle: { fontSize: 13, fontWeight: "800", color: "#2C3E50" },
   auditDate: { fontSize: 12, color: "#7F8C8D" },
   auditRow: { flexDirection: "row", marginBottom: 6 },
   auditLabel: { width: "38%", color: "#7F8C8D", fontWeight: "700", fontSize: 12 },
   auditValue: { width: "62%", color: "#2C3E50", fontSize: 12 },
-  auditSubTitle: { marginTop: 10, marginBottom: 8, fontSize: 12, fontWeight: "800", color: "#2C3E50" },
+  auditSubTitle: {
+    marginTop: 10,
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#2C3E50"
+  },
   auditThumb: { width: 80, height: 80, borderRadius: 10, marginRight: 10, marginBottom: 6 },
 
   /* ✅ Picker */
@@ -1635,7 +1968,7 @@ const styles = StyleSheet.create({
   pickerSubText: { marginTop: 4, fontSize: 12, fontWeight: "700" },
   checkMark: { fontSize: 18, fontWeight: "900", color: "#2E7D32", marginLeft: 10 },
 
-  /* ✅ Add New E-bike button inside details */
+  /* ✅ Add New E-bike button (now at pinaka baba) */
   addNewEbikeBtn: {
     backgroundColor: "#E6F3EC",
     borderWidth: 1,
@@ -1647,13 +1980,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start"
   },
   addNewEbikeBtnText: { color: "#2E7D32", fontWeight: "800" },
-
-  /* ✅ NEW: inline version para di malaki at walang extra margin */
-  addNewEbikeBtnInline: {
-    marginBottom: 0,
-    paddingVertical: 6,
-    paddingHorizontal: 10
-  },
 
   /* ✅ Add E-bike form styles */
   inputLabel: { fontSize: 13, fontWeight: "800", color: "#2C3E50", marginBottom: 6 },

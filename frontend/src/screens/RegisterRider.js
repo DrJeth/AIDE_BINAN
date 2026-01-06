@@ -10,9 +10,12 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  Image,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { auth } from "../config/firebaseConfig";
+import * as ImagePicker from "expo-image-picker";
+
+import { auth, storage } from "../config/firebaseConfig";
 import {
   getFirestore,
   collection,
@@ -21,13 +24,19 @@ import {
   getDocs,
   doc,
   setDoc,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+
 const db = getFirestore();
+
+const MAX_GOV_ID_IMAGES = 3;
 
 function RegisterRider({ navigation }) {
   const [activeSection, setActiveSection] = useState("personal");
@@ -37,6 +46,9 @@ function RegisterRider({ navigation }) {
 
   // ✅ ebikes array (multiple registrations)
   const [ebikes, setEbikes] = useState([]);
+
+  // ✅ NEW: Government Valid ID / Driver's License images (local URIs)
+  const [govIdImages, setGovIdImages] = useState([]);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -130,6 +142,97 @@ function RegisterRider({ navigation }) {
     );
   };
 
+  // ✅ NEW: pick gov ID images
+  const pickGovIdImages = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Camera roll permissions required");
+        return;
+      }
+
+      const remaining = MAX_GOV_ID_IMAGES - (govIdImages?.length || 0);
+      if (remaining <= 0) {
+        Alert.alert(
+          "Limit reached",
+          `You can upload up to ${MAX_GOV_ID_IMAGES} photos only.`
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.7,
+        base64: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const newUris = result.assets.map((a) => a.uri).filter(Boolean);
+
+        setGovIdImages((prev) => {
+          const merged = [...(prev || []), ...newUris];
+          return merged.slice(0, MAX_GOV_ID_IMAGES);
+        });
+
+        clearError("govId"); // ✅ clear error once user uploads
+      }
+    } catch (e) {
+      console.error("pickGovIdImages error:", e);
+      Alert.alert("Error", "Could not pick ID images.");
+    }
+  };
+
+  const removeGovIdImage = (uri) => {
+    setGovIdImages((prev) => (prev || []).filter((x) => x !== uri));
+  };
+
+  // ✅ NEW: upload gov ID images to Storage + return URLs
+  const uploadGovIdImages = async (userId, imageUris) => {
+    if (!imageUris || imageUris.length === 0) return [];
+
+    const urls = [];
+    for (let i = 0; i < imageUris.length; i++) {
+      const uri = imageUris[i];
+      try {
+        const res = await fetch(uri);
+        if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+        const blob = await res.blob();
+
+        const ts = Date.now();
+        const rnd = Math.random().toString(36).slice(2, 8);
+        const path = `rider_ids/${userId}/${ts}_${i}_${rnd}.jpg`;
+
+        const storageRef = ref(storage, path);
+
+        const uploadTask = uploadBytesResumable(storageRef, blob, {
+          contentType: "image/jpeg",
+          customMetadata: {
+            uploadedBy: "rider",
+            riderId: userId,
+            docType: "gov_id",
+          },
+        });
+
+        await new Promise((resolve, reject) => {
+          uploadTask.on(
+            "state_changed",
+            () => {},
+            (error) => reject(error),
+            () => resolve(uploadTask.snapshot)
+          );
+        });
+
+        const downloadURL = await getDownloadURL(storageRef);
+        urls.push(downloadURL);
+      } catch (err) {
+        console.error(`Gov ID upload failed [${i}]`, err);
+      }
+    }
+
+    return urls;
+  };
+
   // Validation Functions
   const validateEmail = (email) => {
     const normalized = (email || "").trim().toLowerCase();
@@ -185,6 +288,7 @@ function RegisterRider({ navigation }) {
       "birthday",
       "contactNumber",
       "address",
+      "govId",
     ];
 
     const err = {};
@@ -224,6 +328,12 @@ function RegisterRider({ navigation }) {
     if (!form.address?.trim()) {
       err.address = true;
       messages.push("Please fill in Address");
+    }
+
+    // ✅ NEW: Gov ID required
+    if (!govIdImages || govIdImages.length === 0) {
+      err.govId = true;
+      messages.push("Please upload Government Valid ID / Driver’s License");
     }
 
     setSectionErrors(sectionKeys, err);
@@ -620,6 +730,7 @@ function RegisterRider({ navigation }) {
         }
       }
 
+      // ✅ Create Auth user (this also signs in the user)
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         normalizedEmail,
@@ -628,9 +739,50 @@ function RegisterRider({ navigation }) {
 
       const userId = userCredential.user.uid;
 
+      // ✅ Upload Gov ID first (required)
+      const uploadedGovUrls = await uploadGovIdImages(userId, govIdImages);
+
+      if (!uploadedGovUrls || uploadedGovUrls.length === 0) {
+        // attempt rollback: delete newly created auth user
+        try {
+          await userCredential.user.delete();
+        } catch (e) {
+          console.warn("Rollback delete user failed:", e);
+        }
+
+        Alert.alert(
+          "Upload Failed",
+          "Government Valid ID / Driver’s License upload is required. Please try again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Save Gov ID URLs to riderRegistrations/{uid}/images (so RiderScreen can display)
+      await setDoc(
+        doc(db, "riderRegistrations", userId),
+        {
+          uid: userId,
+          email: normalizedEmail,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      const imgCol = collection(db, "riderRegistrations", userId, "images");
+      for (const url of uploadedGovUrls) {
+        await addDoc(imgCol, {
+          url,
+          type: "original", // ✅ RiderScreen reads type == original
+          docType: "gov_id",
+          createdAt: serverTimestamp(),
+        });
+      }
+
       const firstPlate = plates[0] || "";
       const firstEbike = ebikesToSave[0] || null;
 
+      // ✅ Save user doc (include govIdUrls as fallback)
       await setDoc(doc(db, "users", userId), {
         uid: userId,
         firstName: (form.firstName || "").trim().toUpperCase(),
@@ -654,9 +806,13 @@ function RegisterRider({ navigation }) {
         ebikes: ebikesToSave,
         plateNumbers: plates,
 
+        // ✅ NEW: fallback copy (optional, for RiderScreen fallback)
+        govIdUrls: uploadedGovUrls,
+
         createdAt: new Date().toISOString(),
       });
 
+      // (optional) ensure signed in (you already are, but kept your original flow)
       await signInWithEmailAndPassword(auth, normalizedEmail, form.password);
 
       Alert.alert(
@@ -838,6 +994,50 @@ function RegisterRider({ navigation }) {
             autoCapitalize="characters"
           />
         </View>
+      </View>
+
+      {/* ✅ NEW: Government Valid ID / Driver's License upload */}
+      <View style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>
+          Government Valid ID / Driver&apos;s License
+          <Text style={styles.requiredStar}> *</Text>
+        </Text>
+
+        <View style={[styles.inputCard, errors.govId && styles.inputCardError]}>
+          <TouchableOpacity
+            style={[styles.uploadBtn, loading && styles.buttonDisabled]}
+            onPress={pickGovIdImages}
+            disabled={loading}
+          >
+            <Text style={styles.uploadBtnText}>
+              {govIdImages.length > 0 ? "Add / Change ID Photos" : "Upload ID Photos"}
+            </Text>
+            <Text style={styles.uploadBtnSub}>
+              Max {MAX_GOV_ID_IMAGES} photos (front/back)
+            </Text>
+          </TouchableOpacity>
+
+          {govIdImages.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {govIdImages.map((uri, idx) => (
+                <View key={`${uri}_${idx}`} style={styles.thumbWrap}>
+                  <Image source={{ uri }} style={styles.thumbImg} />
+                  <TouchableOpacity
+                    style={styles.thumbRemove}
+                    onPress={() => removeGovIdImage(uri)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.thumbRemoveText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        <Text style={styles.helpText}>
+          Upload a clear photo of your ID/License. Make sure the text is readable.
+        </Text>
       </View>
     </View>
   );
@@ -1290,7 +1490,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F7F7F7",
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingVertical: 10,
     ...cardShadow,
   },
 
@@ -1315,7 +1515,7 @@ const styles = StyleSheet.create({
   helpText: {
     fontSize: 12,
     color: "#666",
-    marginTop: 4,
+    marginTop: 6,
     fontStyle: "italic",
   },
 
@@ -1434,6 +1634,52 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#2C3E50",
     marginBottom: 10,
+  },
+
+  // ✅ NEW: Gov ID upload styles
+  uploadBtn: {
+    backgroundColor: "#E6F3EC",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  uploadBtnText: {
+    color: "#2E7D32",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  uploadBtnSub: {
+    marginTop: 4,
+    color: "#2C3E50",
+    fontSize: 11,
+  },
+  thumbWrap: {
+    position: "relative",
+    marginRight: 10,
+  },
+  thumbImg: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+  },
+  thumbRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#F44336",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbRemoveText: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 14,
+    lineHeight: 16,
   },
 });
 

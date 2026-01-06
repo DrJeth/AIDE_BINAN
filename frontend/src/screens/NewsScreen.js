@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
   Dimensions,
   Platform,
   FlatList,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  BackHandler
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -28,6 +29,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../config/firebaseConfig';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Design-matched color palette from HomeAdmin
 const COLORS = {
@@ -40,7 +42,6 @@ const COLORS = {
 };
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const BOTTOM_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 68;
 
 // ✅ modal width/height (bigger + not sagad)
 const VIEW_MODAL_W = Math.min(460, SCREEN_WIDTH - 24);
@@ -53,7 +54,10 @@ const TITLE_MAX = 110;
 const DESC_MIN = 190;
 const DESC_MAX = 360;
 
-export default function NewsScreen({ navigation }) {
+export default function NewsScreen({ navigation, route }) {
+  // ✅ get adminTask from navigation params (passed from HomeAdmin/Login)
+  const adminTask = (route?.params?.adminTask || 'processing').toLowerCase().trim();
+
   const [announcements, setAnnouncements] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -108,6 +112,26 @@ export default function NewsScreen({ navigation }) {
 
     return () => unsubscribe();
   }, []);
+
+  // ✅ ALWAYS back to HomeAdmin (and also handle Android hardware back)
+  const goHome = useCallback(() => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'HomeAdmin', params: { adminTask } }],
+    });
+  }, [navigation, adminTask]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        goHome();
+        return true;
+      };
+
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [goHome])
+  );
 
   const handleCreateAnnouncement = async () => {
     if (!currentUid) {
@@ -284,7 +308,7 @@ export default function NewsScreen({ navigation }) {
         {/* ✅ Green header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={goHome}
             style={styles.backButton}
           >
             <Text style={styles.backArrow}>◂</Text>
@@ -332,8 +356,6 @@ export default function NewsScreen({ navigation }) {
               style={{ width: '100%', alignItems: 'center' }}
             >
               <View style={styles.modalContentLarge}>
-                {/* ❌ REMOVED X button (Create) */}
-
                 <Text style={styles.modalTitle}>Create Announcement</Text>
 
                 <ScrollView
@@ -342,7 +364,6 @@ export default function NewsScreen({ navigation }) {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {/* ✅ TITLE (multiline + adaptive height) */}
                   <TextInput
                     placeholder="Announcement Title"
                     placeholderTextColor={COLORS.TEXT_LIGHT}
@@ -363,7 +384,6 @@ export default function NewsScreen({ navigation }) {
                     scrollEnabled={createTitleH >= TITLE_MAX}
                   />
 
-                  {/* ✅ DESCRIPTION (multiline + adaptive height) */}
                   <TextInput
                     placeholder="Description (Optional)"
                     placeholderTextColor={COLORS.TEXT_LIGHT}
@@ -460,12 +480,10 @@ export default function NewsScreen({ navigation }) {
               style={{ width: '100%', alignItems: 'center' }}
             >
               {!isEditing ? (
-                // ✅ VIEW MODE
                 <View style={styles.viewModalContent}>
                   <View style={styles.viewHeaderRow}>
                     <Text style={styles.viewModalTitle}>View Announcement</Text>
 
-                    {/* ✅ Keep X in VIEW mode */}
                     <TouchableOpacity onPress={closeViewModal} style={styles.closeX}>
                       <Feather name="x" size={22} color={COLORS.TEXT_DARK} />
                     </TouchableOpacity>
@@ -499,7 +517,6 @@ export default function NewsScreen({ navigation }) {
                     ) : null}
                   </ScrollView>
 
-                  {/* ✅ Edit button (only one) */}
                   <TouchableOpacity
                     style={styles.editBtn}
                     onPress={() => {
@@ -515,10 +532,7 @@ export default function NewsScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
               ) : (
-                // ✅ EDIT MODE (same format as Create + adaptive textboxes)
                 <View style={styles.modalContentLarge}>
-                  {/* ❌ REMOVED X button (Edit) */}
-
                   <Text style={styles.modalTitle}>Edit Announcement</Text>
 
                   <ScrollView
@@ -527,7 +541,6 @@ export default function NewsScreen({ navigation }) {
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                   >
-                    {/* ✅ TITLE (multiline + adaptive height) */}
                     <TextInput
                       placeholder="Announcement Title"
                       placeholderTextColor={COLORS.TEXT_LIGHT}
@@ -548,7 +561,6 @@ export default function NewsScreen({ navigation }) {
                       scrollEnabled={editTitleH >= TITLE_MAX}
                     />
 
-                    {/* ✅ DESCRIPTION (multiline + adaptive height) */}
                     <TextInput
                       placeholder="Description (Optional)"
                       placeholderTextColor={COLORS.TEXT_LIGHT}
@@ -642,52 +654,8 @@ export default function NewsScreen({ navigation }) {
           </View>
         </Modal>
 
-        {/* Bottom Navigation */}
-        <View style={[styles.bottomBar, { height: BOTTOM_BAR_HEIGHT }]}>
-          <SafeAreaView style={styles.bottomSafe}>
-            <View style={[styles.bottomInner, { height: BOTTOM_BAR_HEIGHT }]}>
-              <TouchableOpacity
-                style={styles.bottomBarItem}
-                onPress={() => navigation.navigate("HomeAdmin")}
-              >
-                <Feather name="home" size={24} color="white" />
-                <Text style={styles.bottomBarText}>Home</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.bottomBarItem}
-                onPress={() => navigation.navigate("NewsScreen")}
-              >
-                <Feather name="file-text" size={24} color="white" />
-                <Text style={styles.bottomBarText}>News</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.bottomBarItem}
-                onPress={() => navigation.navigate("RiderScreen")}
-              >
-                <Feather name="users" size={24} color="white" />
-                <Text style={styles.bottomBarText}>Rider</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.bottomBarItem}
-                onPress={() => navigation.navigate("AdminAppointment")}
-              >
-                <Feather name="calendar" size={24} color="white" />
-                <Text style={styles.bottomBarText}>Appointment</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.bottomBarItem}
-                onPress={() => navigation.navigate("Me")}
-              >
-                <Feather name="user" size={24} color="white" />
-                <Text style={styles.bottomBarText}>Profile</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
+        {/* ✅ REMOVED: footer/bottom bar here
+            HomeAdmin lang dapat ang may footer para walang double Profile */}
       </View>
     </SafeAreaView>
   );
@@ -943,19 +911,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '800',
     fontSize: 14
-  },
-
-  bottomBar: {
-    backgroundColor: COLORS.BOTTOM_BAR_GREEN,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20
-  },
-  bottomSafe: { flex: 1 },
-  bottomInner: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center'
-  },
-  bottomBarItem: { alignItems: 'center', justifyContent: 'center' },
-  bottomBarText: { color: 'white', fontSize: 12, marginTop: 5 }
+  }
 });

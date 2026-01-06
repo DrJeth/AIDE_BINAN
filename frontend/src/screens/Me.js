@@ -18,8 +18,7 @@ import {
   collection,
   query,
   where,
-  getDocs,
-  deleteDoc
+  getDocs
 } from "firebase/firestore";
 import { app } from "../config/firebaseConfig";
 import EditProfileModal from "./EditProfileModal";
@@ -136,57 +135,6 @@ export default function Me({ navigation }) {
       .catch((error) => Alert.alert("Logout Error", error.message));
   };
 
-  const onDeleteAccount = () => {
-    if (userRole === "Rider") {
-      Alert.alert(
-        "Restricted",
-        "Riders are not allowed to delete their account.",
-        [{ text: "OK" }]
-      );
-      return;
-    }
-
-    Alert.alert(
-      "Delete Account",
-      "Are you sure you want to permanently delete your account? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const auth = getAuth(app);
-              const db = getFirestore(app);
-              const user = auth.currentUser;
-
-              if (!user) return;
-
-              const docIdToDelete = userDocId || user.uid;
-              await deleteDoc(doc(db, "users", docIdToDelete));
-
-              await user.delete();
-
-              Alert.alert("Success", "Account deleted successfully");
-              navigation.replace("Login");
-            } catch (error) {
-              console.error("Delete account error:", error);
-
-              if (error?.code === "auth/requires-recent-login") {
-                Alert.alert(
-                  "Security check needed",
-                  "Please log out, log in again, then try deleting the account."
-                );
-              } else {
-                Alert.alert("Error", error?.message || "Failed to delete account");
-              }
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const getFullName = () => {
     const fullName = `${userData.firstName || ""} ${userData.lastName || ""}`.trim();
     return fullName || "Rider";
@@ -282,12 +230,7 @@ export default function Me({ navigation }) {
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
-            {!isRider && (
-              <TouchableOpacity onPress={onDeleteAccount} style={[styles.row, styles.rowDanger]}>
-                <Text style={[styles.rowText, styles.dangerText]}>Delete Account</Text>
-                <Text style={[styles.chev, styles.dangerText]}>›</Text>
-              </TouchableOpacity>
-            )}
+            {/* ✅ Delete Account REMOVED for BOTH Rider and Admin */}
 
             <TouchableOpacity onPress={onLogout} style={[styles.row, styles.rowDanger]}>
               <Text style={[styles.rowText, styles.dangerText]}>Log Out</Text>
