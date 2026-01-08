@@ -32,12 +32,12 @@ import {
   updateDoc,
   doc,
   getDoc,
-  setDoc
+  setDoc,
+  deleteField
 } from "firebase/firestore";
 
 LogBox.ignoreLogs([
   "Non-serializable values were found in the navigation state",
-  // ✅ hide noisy firebase logs in dev (best-effort)
   "FirebaseError:",
   "Firebase: Error"
 ]);
@@ -60,9 +60,7 @@ const POSITION_TO_TASK_ROLE = {
   "Processing of E-bike Registration": "processing",
   "Validator of E-bike Registration": "validator",
   "Inspector": "inspector",
-
-  // ✅ backward compatibility (old label)
-  "Inspection": "inspector"
+  "Inspection": "inspector" // backward compatibility
 };
 
 const getAdminTaskRole = (userData = {}) => {
@@ -80,28 +78,22 @@ const getFriendlyAuthMessage = (code = "") => {
     "auth/user-disabled": "This account has been disabled. Please contact the administrator.",
     "auth/too-many-requests": "Too many attempts. Please try again later.",
     "auth/network-request-failed": "Network error. Please check your internet connection.",
-    // ✅ common “wrong email/password” variants (depends on firebase sdk version)
     "auth/user-not-found": "Invalid email or password.",
     "auth/wrong-password": "Invalid email or password.",
     "auth/invalid-credential": "Invalid email or password.",
     "auth/invalid-login-credentials": "Invalid email or password."
   };
-
   return map[code] || "Login failed. Please try again.";
 };
 
 export default function Login({ navigation }) {
-  // ❌ removed role switching
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [isLoading, setIsLoading] = useState(false); // login loading
-  const [isResetting, setIsResetting] = useState(false); // forgot-password loading
+  const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  // show/hide password
   const [showPassword, setShowPassword] = useState(false);
-
-  // ✅ inline notice (built-in app message) instead of firebase error popups/messages
   const [loginNotice, setLoginNotice] = useState("");
 
   // Email verification states
@@ -109,32 +101,40 @@ export default function Login({ navigation }) {
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [tempUserEmail, setTempUserEmail] = useState("");
-  const [tempUserRole, setTempUserRole] = useState(""); // detected role
-  const [tempUserDocId, setTempUserDocId] = useState(""); // detected user doc id (will be UID)
+  const [tempUserRole, setTempUserRole] = useState("");
+  const [tempUserDocId, setTempUserDocId] = useState("");
   const [resendCountdown, setResendCountdown] = useState(0);
 
-  // ✅ store detected admin task role (processing/validator/inspector)
+  // Admin task role
   const [tempAdminTaskRole, setTempAdminTaskRole] = useState("");
 
-  // 2FA states
+  // 2FA states (ALWAYS ON)
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [twoFACode, setTwoFACode] = useState("");
   const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+  const [twoFAResendCountdown, setTwoFAResendCountdown] = useState(0);
 
   const db = getFirestore();
 
-  // Countdown timer for resend button
+  // Countdown timer for EMAIL resend button
   useEffect(() => {
     let interval;
     if (resendCountdown > 0) {
-      interval = setInterval(() => {
-        setResendCountdown((prev) => prev - 1);
-      }, 1000);
+      interval = setInterval(() => setResendCountdown((prev) => prev - 1), 1000);
     }
     return () => clearInterval(interval);
   }, [resendCountdown]);
 
-  // ===== FORGOT PASSWORD HANDLER =====
+  // Countdown timer for 2FA resend button
+  useEffect(() => {
+    let interval;
+    if (twoFAResendCountdown > 0) {
+      interval = setInterval(() => setTwoFAResendCountdown((prev) => prev - 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [twoFAResendCountdown]);
+
+  // ===== FORGOT PASSWORD =====
   const handleForgotPassword = async () => {
     const trimmedEmail = email.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -143,7 +143,6 @@ export default function Login({ navigation }) {
       Alert.alert("Forgot Password", "Please enter your email first.");
       return;
     }
-
     if (!emailRegex.test(trimmedEmail)) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
       return;
@@ -157,7 +156,6 @@ export default function Login({ navigation }) {
         `A password reset link has been sent to ${trimmedEmail}. Please check your inbox or spam folder.`
       );
     } catch (error) {
-      // ✅ no firebase raw message
       if (error?.code === "auth/user-not-found") {
         Alert.alert("Error", "No account found with this email.");
       } else if (error?.code === "auth/invalid-email") {
@@ -177,36 +175,29 @@ export default function Login({ navigation }) {
     try {
       const verificationCode = generateVerificationCode();
 
-      // Update user document with verification code
       const userRef = doc(db, "users", userDocId);
       await updateDoc(userRef, {
         emailVerificationCode: verificationCode,
         emailVerificationCodeSentAt: new Date()
       });
 
-      // Call PHP backend to send email
       try {
         const response = await fetch(BACKEND_URL, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: userEmail,
-            verificationCode: verificationCode
+            verificationCode
           })
         });
 
         const data = await response.json();
-
         if (response.ok && data.success) {
           Alert.alert("Code Sent", `Verification code has been sent to ${userEmail}`);
           return true;
-        } else {
-          throw new Error(data?.error || "Failed to send email");
         }
+        throw new Error(data?.error || "Failed to send email");
       } catch (error) {
-        // Fallback: Show code in alert (kept as-is)
         Alert.alert("Code Generated", `Your verification code is:\n\n${verificationCode}`, [
           { text: "OK" }
         ]);
@@ -218,29 +209,59 @@ export default function Login({ navigation }) {
     }
   };
 
-  // ✅ role + task routing (FIXED)
-  // ✅ Rider -> HomeRider
-  // ✅ Admin (processing/validator/inspector) -> ALWAYS HomeAdmin
-  // HomeAdmin will handle which tabs to show based on adminTaskRole param.
+  // ✅ Send 2FA login code via PHP backend (ALWAYS ON)
+  const sendTwoFACodeToEmail = async (userEmail, userDocId) => {
+    try {
+      const code = generateVerificationCode();
+
+      const userRef = doc(db, "users", userDocId);
+      await updateDoc(userRef, {
+        twoFACode: code,
+        twoFACodeSentAt: new Date()
+      });
+
+      try {
+        const response = await fetch(BACKEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: userEmail,
+            verificationCode: code
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+          Alert.alert("Login Code Sent", `A login code has been sent to ${userEmail}`);
+          return true;
+        }
+        throw new Error(data?.error || "Failed to send email");
+      } catch (error) {
+        Alert.alert("Login Code Generated", `Your login code is:\n\n${code}`, [{ text: "OK" }]);
+        return true;
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to send 2-step login code. Please try again.");
+      return false;
+    }
+  };
+
+  // Role routing
   const navigateByRoleAndTask = (roleValue, adminTaskRoleValue = "") => {
     if (roleValue === "Rider") {
       navigation.replace("HomeRider");
       return;
     }
-
     const task = (adminTaskRoleValue || "processing").toLowerCase();
-
-    // ✅ ALWAYS go to HomeAdmin
     navigation.replace("HomeAdmin", { adminTaskRole: task });
   };
 
-  // Verify email code (DOC-ID based)
+  // Verify email code
   const handleVerifyEmailCode = async () => {
     if (!emailVerificationCode.trim()) {
       Alert.alert("Error", "Please enter the verification code");
       return;
     }
-
     if (emailVerificationCode.length !== 6) {
       Alert.alert("Error", "Verification code must be 6 digits");
       return;
@@ -265,31 +286,24 @@ export default function Login({ navigation }) {
 
       const userData = snap.data();
 
-      if (userData.emailVerificationCode === emailVerificationCode) {
+      if ((userData.emailVerificationCode || "") === emailVerificationCode) {
         setShowEmailVerificationModal(false);
         setEmailVerificationCode("");
 
-        // ✅ refresh admin task role (in case missing)
+        // refresh admin task role
         const computedTaskRole = tempUserRole === "Admin" ? getAdminTaskRole(userData) : "";
         if (computedTaskRole && computedTaskRole !== tempAdminTaskRole) {
           setTempAdminTaskRole(computedTaskRole);
-          await setDoc(
-            doc(db, "users", tempUserDocId),
-            { adminTaskRole: computedTaskRole },
-            { merge: true }
-          );
+          await setDoc(doc(db, "users", tempUserDocId), { adminTaskRole: computedTaskRole }, { merge: true });
         }
 
-        // After email verification, check if 2FA is enabled
-        if (userData.twoFAEnabled === true) {
-          Alert.alert("Success", "Email verified! Now verify 2FA.");
+        // ✅ ALWAYS ON 2FA after email verification
+        const sent = await sendTwoFACodeToEmail(tempUserEmail, tempUserDocId);
+        if (sent) {
+          setTwoFAResendCountdown(60);
           setShow2FAModal(true);
-        } else {
-          Alert.alert("Success", "Email verified! Logging in...");
-          setTimeout(() => {
-            navigateByRoleAndTask(tempUserRole, computedTaskRole || tempAdminTaskRole);
-          }, 500);
         }
+        return;
       } else {
         Alert.alert("Invalid Code", "The verification code you entered is incorrect.");
       }
@@ -306,15 +320,14 @@ export default function Login({ navigation }) {
     if (success) setResendCountdown(60);
   };
 
-  // Verify 2FA code (DOC-ID based)
+  // Verify 2FA code (ALWAYS REQUIRED)
   const handleVerify2FA = async () => {
     if (!twoFACode.trim()) {
-      Alert.alert("Error", "Please enter your 2FA code");
+      Alert.alert("Error", "Please enter your login code");
       return;
     }
-
     if (twoFACode.length !== 6) {
-      Alert.alert("Error", "2FA code must be 6 digits");
+      Alert.alert("Error", "Login code must be 6 digits");
       return;
     }
 
@@ -337,59 +350,60 @@ export default function Login({ navigation }) {
 
       const userData = snap.data();
 
-      if (userData.twoFAEnabled === true && userData.twoFACode === twoFACode) {
-        Alert.alert("Success", "Login successful!");
+      if ((userData.twoFACode || "") === twoFACode) {
+        // ✅ clear used code (safer)
+        await updateDoc(userRef, {
+          twoFACode: deleteField(),
+          twoFACodeSentAt: deleteField()
+        });
 
         setShow2FAModal(false);
         setTwoFACode("");
 
-        // ✅ refresh admin task role again
+        // refresh task role again
         const computedTaskRole = tempUserRole === "Admin" ? getAdminTaskRole(userData) : "";
         if (computedTaskRole && computedTaskRole !== tempAdminTaskRole) {
           setTempAdminTaskRole(computedTaskRole);
-          await setDoc(
-            doc(db, "users", tempUserDocId),
-            { adminTaskRole: computedTaskRole },
-            { merge: true }
-          );
+          await setDoc(doc(db, "users", tempUserDocId), { adminTaskRole: computedTaskRole }, { merge: true });
         }
 
+        Alert.alert("Success", "Login successful!");
         setTimeout(() => {
           navigateByRoleAndTask(tempUserRole, computedTaskRole || tempAdminTaskRole);
-        }, 500);
+        }, 400);
       } else {
-        Alert.alert("Invalid Code", "The 2FA code you entered is incorrect.");
+        Alert.alert("Invalid Code", "The login code you entered is incorrect.");
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to verify 2FA code");
+      Alert.alert("Error", "Failed to verify login code");
     } finally {
       setIsVerifying2FA(false);
     }
   };
 
-  // Resend 2FA code (placeholder)
-  const handleResend2FA = () => {
-    Alert.alert("Code Sent", "A new 2FA code has been sent to your email");
+  // ✅ REAL resend for 2FA (ALWAYS ON)
+  const handleResend2FA = async () => {
+    if (isVerifying2FA) return;
+    if (twoFAResendCountdown > 0) return;
+
+    const sent = await sendTwoFACodeToEmail(tempUserEmail, tempUserDocId);
+    if (sent) setTwoFAResendCountdown(60);
   };
 
   const handleLogin = async () => {
-    // ✅ clear previous notice
     setLoginNotice("");
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const trimmedEmail = email.trim();
 
-    // ✅ built-in notice (no alert) for input validation
     if (!trimmedEmail) {
       setLoginNotice("Please enter your email.");
       return;
     }
-
     if (!emailRegex.test(trimmedEmail)) {
       setLoginNotice("Please enter a valid email address.");
       return;
     }
-
     if (!password.trim()) {
       setLoginNotice("Please enter your password.");
       return;
@@ -399,7 +413,6 @@ export default function Login({ navigation }) {
     try {
       await signInWithEmailAndPassword(auth, trimmedEmail, password);
 
-      // ✅ After signIn, get UID
       const uid = auth.currentUser?.uid;
       if (!uid) {
         await signOut(auth);
@@ -407,7 +420,7 @@ export default function Login({ navigation }) {
         return;
       }
 
-      // ✅ 1) Try users/{uid} first
+      // 1) Try users/{uid}
       let userDocId = uid;
       let userData = null;
 
@@ -417,7 +430,6 @@ export default function Login({ navigation }) {
       if (uidSnap.exists()) {
         userData = uidSnap.data();
 
-        // ✅ if adminTaskRole missing, auto-create it from position
         if (userData?.role === "Admin") {
           const computed = getAdminTaskRole(userData);
           if ((userData.adminTaskRole || "").toLowerCase() !== computed) {
@@ -426,7 +438,7 @@ export default function Login({ navigation }) {
           }
         }
       } else {
-        // ✅ 2) Fallback: old accounts saved with addDoc(randomID) — search by email
+        // 2) Fallback: old doc search by email
         const userQuery = query(collection(db, "users"), where("email", "==", trimmedEmail));
         const userSnapshot = await getDocs(userQuery);
 
@@ -445,14 +457,14 @@ export default function Login({ navigation }) {
         const oldDoc = userSnapshot.docs[0];
         userData = oldDoc.data();
 
-        // ✅ MIGRATION: copy legacy doc into users/{uid}
         const computedTask = userData?.role === "Admin" ? getAdminTaskRole(userData) : "";
 
+        // MIGRATION into users/{uid}
         await setDoc(
           doc(db, "users", uid),
           {
             ...userData,
-            uid: uid,
+            uid,
             email: trimmedEmail,
             ...(computedTask ? { adminTaskRole: computedTask } : {})
           },
@@ -469,7 +481,6 @@ export default function Login({ navigation }) {
       }
 
       const detectedRole = userData?.role; // "Admin" or "Rider"
-
       if (detectedRole !== "Admin" && detectedRole !== "Rider") {
         await signOut(auth);
         setLoginNotice("Invalid user role. Please contact administrator.");
@@ -481,10 +492,10 @@ export default function Login({ navigation }) {
       // store temp values for verification flows
       setTempUserEmail(trimmedEmail);
       setTempUserRole(detectedRole);
-      setTempUserDocId(userDocId); // ✅ always UID now
+      setTempUserDocId(userDocId);
       setTempAdminTaskRole(detectedAdminTaskRole);
 
-      // Check if email verification is enabled
+      // ✅ If email verification enabled -> email verify first
       if (userData.emailVerificationEnabled === true) {
         const codeSent = await sendEmailVerificationCode(trimmedEmail, userDocId);
         if (codeSent) {
@@ -494,16 +505,14 @@ export default function Login({ navigation }) {
         return;
       }
 
-      // If no email verification, check 2FA
-      if (userData.twoFAEnabled === true) {
+      // ✅ ALWAYS ON 2FA (both Rider & Admin)
+      const sent = await sendTwoFACodeToEmail(trimmedEmail, userDocId);
+      if (sent) {
+        setTwoFAResendCountdown(60);
         setShow2FAModal(true);
-        return;
       }
-
-      // Both verifications disabled - proceed
-      navigateByRoleAndTask(detectedRole, detectedAdminTaskRole);
+      return;
     } catch (error) {
-      // ✅ no console.error, no raw firebase message shown
       const friendly = getFriendlyAuthMessage(error?.code);
       setLoginNotice(friendly);
     } finally {
@@ -511,7 +520,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // ✅ wrappers to clear notice when typing
+  // clear notice when typing
   const handleEmailChange = (v) => {
     setLoginNotice("");
     setEmail(v);
@@ -577,12 +586,7 @@ export default function Login({ navigation }) {
 
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: "absolute",
-                    right: 14,
-                    top: 14,
-                    padding: 4
-                  }}
+                  style={{ position: "absolute", right: 14, top: 14, padding: 4 }}
                   disabled={isLoading}
                 >
                   <Text style={{ color: "#2e7d32", fontWeight: "700" }}>
@@ -591,7 +595,6 @@ export default function Login({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Forgot password under Show/Hide */}
               <View style={styles.forgotRow}>
                 <TouchableOpacity onPress={handleForgotPassword} disabled={isResetting}>
                   <Text style={styles.forgotText}>
@@ -600,7 +603,6 @@ export default function Login({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* ✅ Built-in app notice (no Firebase popup/message) */}
               {!!loginNotice && <Text style={styles.inlineNotice}>{loginNotice}</Text>}
 
               <TouchableOpacity
@@ -617,10 +619,7 @@ export default function Login({ navigation }) {
 
               <View style={styles.signupRow}>
                 <Text style={styles.bottomText}>Don't have an account?</Text>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("RegisterRider")}
-                  disabled={isLoading}
-                >
+                <TouchableOpacity onPress={() => navigation.navigate("RegisterRider")} disabled={isLoading}>
                   <Text style={styles.signUpText}> Sign Up</Text>
                 </TouchableOpacity>
               </View>
@@ -632,12 +631,16 @@ export default function Login({ navigation }) {
       {/* EMAIL VERIFICATION MODAL */}
       <Modal
         animationType="fade"
-        transparent={true}
+        transparent
         visible={showEmailVerificationModal}
-        onRequestClose={() => {
+        onRequestClose={async () => {
           if (!isVerifyingEmail) {
             setShowEmailVerificationModal(false);
             setEmailVerificationCode("");
+            setEmail("");
+            setPassword("");
+            setLoginNotice("");
+            await signOut(auth); // security
           }
         }}
       >
@@ -659,10 +662,7 @@ export default function Login({ navigation }) {
             />
 
             <TouchableOpacity
-              style={[
-                styles.verificationButton,
-                isVerifyingEmail && styles.verificationButtonDisabled
-              ]}
+              style={[styles.verificationButton, isVerifyingEmail && styles.verificationButtonDisabled]}
               onPress={handleVerifyEmailCode}
               disabled={isVerifyingEmail}
             >
@@ -674,10 +674,7 @@ export default function Login({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.resendButton,
-                resendCountdown > 0 && styles.resendButtonDisabled
-              ]}
+              style={[styles.resendButton, resendCountdown > 0 && styles.resendButtonDisabled]}
               onPress={handleResendEmailCode}
               disabled={isVerifyingEmail || resendCountdown > 0}
             >
@@ -695,7 +692,7 @@ export default function Login({ navigation }) {
                   setEmail("");
                   setPassword("");
                   setLoginNotice("");
-                  await signOut(auth); // ✅ security: cancel = logout
+                  await signOut(auth);
                 }
               }}
               disabled={isVerifyingEmail}
@@ -706,22 +703,26 @@ export default function Login({ navigation }) {
         </View>
       </Modal>
 
-      {/* 2FA VERIFICATION MODAL */}
+      {/* 2FA VERIFICATION MODAL (ALWAYS ON) */}
       <Modal
         animationType="fade"
-        transparent={true}
+        transparent
         visible={show2FAModal}
-        onRequestClose={() => {
+        onRequestClose={async () => {
           if (!isVerifying2FA) {
             setShow2FAModal(false);
             setTwoFACode("");
+            setEmail("");
+            setPassword("");
+            setLoginNotice("");
+            await signOut(auth); // security
           }
         }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.twoFAModalContent}>
             <Text style={styles.twoFATitle}>2-Step Verification</Text>
-            <Text style={styles.twoFASubtitle}>Enter the 6-digit code sent to your email</Text>
+            <Text style={styles.twoFASubtitle}>Enter the 6-digit login code sent to your email</Text>
 
             <TextInput
               style={styles.twoFACodeInput}
@@ -748,11 +749,13 @@ export default function Login({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.resendButton}
+              style={[styles.resendButton, twoFAResendCountdown > 0 && styles.resendButtonDisabled]}
               onPress={handleResend2FA}
-              disabled={isVerifying2FA}
+              disabled={isVerifying2FA || twoFAResendCountdown > 0}
             >
-              <Text style={styles.resendText}>Didn't receive? Resend</Text>
+              <Text style={styles.resendText}>
+                {twoFAResendCountdown > 0 ? `Resend in ${twoFAResendCountdown}s` : "Didn't receive? Resend"}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -764,7 +767,7 @@ export default function Login({ navigation }) {
                   setEmail("");
                   setPassword("");
                   setLoginNotice("");
-                  await signOut(auth); // ✅ security: cancel = logout
+                  await signOut(auth);
                 }
               }}
               disabled={isVerifying2FA}
@@ -779,13 +782,8 @@ export default function Login({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#16662f"
-  },
-  fullscreen: {
-    flex: 1
-  },
+  page: { flex: 1, backgroundColor: "#16662f" },
+  fullscreen: { flex: 1 },
   centerContent: {
     flexGrow: 1,
     justifyContent: "center",
@@ -803,21 +801,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
     marginBottom: 10
   },
-  welcome: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "800"
-  },
-  aide: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 4
-  },
-  cardWrapper: {
-    marginTop: 30,
-    alignItems: "center"
-  },
+  welcome: { color: "#fff", fontSize: 26, fontWeight: "800" },
+  aide: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 4 },
+  cardWrapper: { marginTop: 30, alignItems: "center" },
   sealHolder: {
     position: "absolute",
     top: -42,
@@ -827,10 +813,7 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     zIndex: 50
   },
-  scooterMiddle: {
-    width: 85,
-    height: 85
-  },
+  scooterMiddle: { width: 85, height: 85 },
   whiteCard: {
     width: "100%",
     backgroundColor: "#fff",
@@ -842,12 +825,7 @@ const styles = StyleSheet.create({
     borderColor: "#cccccc",
     elevation: 8
   },
-  label: {
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 6,
-    marginLeft: 4
-  },
+  label: { fontWeight: "700", color: "#333", marginBottom: 6, marginLeft: 4 },
   input: {
     backgroundColor: "#fff",
     height: 48,
@@ -858,19 +836,9 @@ const styles = StyleSheet.create({
     borderColor: "#e3e3e3"
   },
 
-  // forgot password styles
-  forgotRow: {
-    alignItems: "flex-end",
-    marginTop: -4,
-    marginBottom: 4
-  },
-  forgotText: {
-    fontSize: 12,
-    color: "#2e7d32",
-    fontWeight: "600"
-  },
+  forgotRow: { alignItems: "flex-end", marginTop: -4, marginBottom: 4 },
+  forgotText: { fontSize: 12, color: "#2e7d32", fontWeight: "600" },
 
-  // ✅ inline notice style
   inlineNotice: {
     marginTop: 6,
     marginBottom: 4,
@@ -888,26 +856,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20
   },
-  loginBtnDisabled: {
-    opacity: 0.6
-  },
-  loginBtnText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  signupRow: {
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "center"
-  },
-  bottomText: { color: "#777" },
-  signUpText: {
-    color: "#2e7d32",
-    fontWeight: "700"
-  },
+  loginBtnDisabled: { opacity: 0.6 },
+  loginBtnText: { color: "#fff", fontSize: 18, fontWeight: "800" },
 
-  /* MODALS */
+  signupRow: { marginTop: 20, flexDirection: "row", justifyContent: "center" },
+  bottomText: { color: "#777" },
+  signUpText: { color: "#2e7d32", fontWeight: "700" },
+
   modalContainer: {
     flex: 1,
     justifyContent: "center",
@@ -915,7 +870,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)"
   },
 
-  /* EMAIL VERIFICATION MODAL */
   emailVerificationModalContent: {
     width: "85%",
     backgroundColor: "white",
@@ -923,12 +877,7 @@ const styles = StyleSheet.create({
     padding: 30,
     alignItems: "center"
   },
-  verificationTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 8,
-    color: "#333"
-  },
+  verificationTitle: { fontSize: 24, fontWeight: "800", marginBottom: 8, color: "#333" },
   verificationSubtitle: {
     fontSize: 14,
     color: "#666",
@@ -955,16 +904,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12
   },
-  verificationButtonDisabled: {
-    opacity: 0.6
-  },
-  verificationButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700"
-  },
+  verificationButtonDisabled: { opacity: 0.6 },
+  verificationButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
 
-  /* 2FA Modal */
   twoFAModalContent: {
     width: "85%",
     backgroundColor: "white",
@@ -972,12 +914,7 @@ const styles = StyleSheet.create({
     padding: 30,
     alignItems: "center"
   },
-  twoFATitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 8,
-    color: "#333"
-  },
+  twoFATitle: { fontSize: 24, fontWeight: "800", marginBottom: 8, color: "#333" },
   twoFASubtitle: {
     fontSize: 14,
     color: "#666",
@@ -1004,35 +941,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12
   },
-  twoFAButtonDisabled: {
-    opacity: 0.6
-  },
-  twoFAButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700"
-  },
+  twoFAButtonDisabled: { opacity: 0.6 },
+  twoFAButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
 
-  resendButton: {
-    marginBottom: 12
-  },
-  resendButtonDisabled: {
-    opacity: 0.5
-  },
-  resendText: {
-    color: "#2e7d32",
-    fontSize: 14,
-    fontWeight: "600"
-  },
+  resendButton: { marginBottom: 12 },
+  resendButtonDisabled: { opacity: 0.5 },
+  resendText: { color: "#2e7d32", fontSize: 14, fontWeight: "600" },
 
-  cancelButton: {
-    width: "100%",
-    paddingVertical: 12,
-    alignItems: "center"
-  },
-  cancelText: {
-    color: "#666",
-    fontSize: 14,
-    fontWeight: "600"
-  }
+  cancelButton: { width: "100%", paddingVertical: 12, alignItems: "center" },
+  cancelText: { color: "#666", fontSize: 14, fontWeight: "600" }
 });
+
+

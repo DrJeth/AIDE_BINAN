@@ -153,6 +153,103 @@ const getTabStatusFilter = (tab) => {
   return tab === INSPECT_TAB ? STATUS.FOR_INSPECTION : tab;
 };
 
+/* =========================
+   ✅ FIX #1: GOV ID URL RESOLVER
+   - supports url/downloadURL/imageUrl/uri/urls/storagePath/gs://
+   - does NOT rely on type == "original"
+========================= */
+const isHttpUrl = (s) => /^https?:\/\//i.test(String(s || '').trim());
+
+const coerceStringArray = (v) => {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.flatMap(coerceStringArray);
+  if (typeof v === 'string') return [v];
+  return [];
+};
+
+const safeTrim = (s) => (typeof s === 'string' ? s.trim() : '');
+
+const resolveStorageUrlMaybe = async (maybeUrlOrPath) => {
+  const s = safeTrim(maybeUrlOrPath);
+  if (!s) return null;
+  if (isHttpUrl(s)) return s;
+
+  // gs:// or storage path -> convert to downloadURL
+  try {
+    const dl = await getDownloadURL(ref(storage, s));
+    return dl;
+  } catch {
+    return null;
+  }
+};
+
+const collectGovIdCandidates = (userData = {}, imageDocs = []) => {
+  const raw = [];
+
+  // from image docs
+  (imageDocs || []).forEach((d) => {
+    const data = d || {};
+    const t = (data.type || data.docType || data.category || '').toString().toLowerCase();
+
+    // exclude obvious non-ID types
+    const isNotId =
+      t.includes('receipt') ||
+      t.includes('ebike') ||
+      t.includes('payment') ||
+      t.includes('profile');
+
+    if (isNotId) return;
+
+    // include if type is blank/unknown or looks like ID/license
+    const looksLikeId =
+      !t ||
+      t === 'original' ||
+      t.includes('gov') ||
+      t.includes('valid') ||
+      t.includes('id') ||
+      t.includes('license') ||
+      t.includes('driver');
+
+    if (!looksLikeId) return;
+
+    raw.push(
+      ...coerceStringArray(data.url),
+      ...coerceStringArray(data.downloadURL),
+      ...coerceStringArray(data.downloadUrl),
+      ...coerceStringArray(data.imageUrl),
+      ...coerceStringArray(data.imageURL),
+      ...coerceStringArray(data.uri),
+      ...coerceStringArray(data.urls),
+      ...coerceStringArray(data.path),
+      ...coerceStringArray(data.storagePath),
+      ...coerceStringArray(data.storageUri),
+      ...coerceStringArray(data.gsUrl),
+      ...coerceStringArray(data.gsURL),
+    );
+  });
+
+  // fallback fields directly on user doc (in case you store IDs there)
+  raw.push(
+    ...coerceStringArray(userData.govIdUrl),
+    ...coerceStringArray(userData.govIDUrl),
+    ...coerceStringArray(userData.govIdImageUrl),
+    ...coerceStringArray(userData.govIDImageUrl),
+    ...coerceStringArray(userData.validIdUrl),
+    ...coerceStringArray(userData.validIDUrl),
+    ...coerceStringArray(userData.driverLicenseUrl),
+    ...coerceStringArray(userData.driversLicenseUrl),
+    ...coerceStringArray(userData.idUrl),
+    ...coerceStringArray(userData.idUrls),
+    ...coerceStringArray(userData.govIdUrls),
+    ...coerceStringArray(userData.govIDUrls),
+  );
+
+  // normalize + dedupe
+  return Array.from(
+    new Set(raw.map(safeTrim).filter(Boolean))
+  );
+};
+
 const RiderScreen = ({ navigation, route }) => {
   const [adminRole, setAdminRole] = useState(
     (route?.params?.adminRole || '').toString().toLowerCase() || ''
@@ -437,13 +534,16 @@ const RiderScreen = ({ navigation, route }) => {
 
         let imagesData = [];
         try {
-          const imagesQuerySnapshot = await getDocs(
-            query(
-              collection(db, 'riderRegistrations', userDoc.id, 'images'),
-              where('type', '==', 'original')
-            )
-          );
-          imagesData = imagesQuerySnapshot.docs.map(d => d.data()?.url).filter(Boolean);
+          // ✅ FIX #1: do NOT filter by type=="original" only; fetch all then extract likely gov-id urls
+          const imagesColRef = collection(db, 'riderRegistrations', userDoc.id, 'images');
+          const imagesSnap = await getDocs(imagesColRef);
+          const imageDocs = imagesSnap.docs.map(d => d.data() || {});
+
+          const rawCandidates = collectGovIdCandidates(userData, imageDocs);
+
+          // resolve gs:// or storage paths
+          const resolved = await Promise.all(rawCandidates.map(resolveStorageUrlMaybe));
+          imagesData = resolved.filter(Boolean);
         } catch (e) { }
 
         const ebikes = normalizeUserEbikes(userData);
@@ -826,7 +926,6 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      // ✅ CHANGE #2:
       // PASSED -> keep status FOR_INSPECTION but will disappear from Inspect list (filtered out)
       // FAILED -> automatically return to RETURNED
       if (String(result).toUpperCase() === 'FAILED') {
@@ -898,7 +997,7 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      // ✅ CHANGE #1: Renewal date is automatic (Registered + 1 year), NOT manual
+      // ✅ Renewal date is automatic (Registered + 1 year)
       const autoRenewISO = addYearsISO(registeredDateInput, 1);
       if (!autoRenewISO) {
         Alert.alert('Error', 'Invalid Registration Date. Please select again.');
@@ -917,7 +1016,7 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      // ✅ FIX: allow processing to SET/OVERRIDE plate number using manualPlateNumber
+      // ✅ allow processing to SET/OVERRIDE plate number using manualPlateNumber
       let finalPlateNumber = (manualPlateNumber || '').trim().toUpperCase();
       if (!finalPlateNumber) {
         finalPlateNumber = selectedEbike?.plateNumber ? String(selectedEbike.plateNumber).trim().toUpperCase() : '';
@@ -981,6 +1080,8 @@ const RiderScreen = ({ navigation, route }) => {
           type: 'Registration'
         };
 
+        // ✅ FIX #2: When Processing resubmits after FAILED inspection (or any resubmission),
+        // reset inspection fields so it will show again to Inspector when sent back for inspection.
         normalized[idx] = {
           ...old,
           status: STATUS.FOR_VALIDATION,
@@ -996,6 +1097,12 @@ const RiderScreen = ({ navigation, route }) => {
 
           submittedForValidationAt: now,
           submittedForValidationBy: auth.currentUser?.uid || '',
+
+          // ✅ clear any previous cycle inspection (FAILED/PASSED) so it can be inspected again
+          inspectionResult: null,
+          inspection: null,
+          approvedForInspectionAt: null,
+          approvedForInspectionBy: null,
 
           returnReason: null,
           returnedAt: null,
@@ -1059,10 +1166,13 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
+      // ✅ FIX #2 safety: always reset inspection fields when moving to For Inspection
       await updateSelectedEbikeStatus(STATUS.FOR_INSPECTION, {
         approvedForInspectionAt: new Date(),
         approvedForInspectionBy: auth.currentUser?.uid || '',
         validatorNotes: validatorNotes?.trim() || '',
+        inspectionResult: null,
+        inspection: null,
       });
 
       Alert.alert('Approved', 'Sent to For Inspection.');
@@ -1749,7 +1859,7 @@ const RiderScreen = ({ navigation, route }) => {
               {/* ✅ KEEP processing UI */}
               {canEditAsProcessing && (
                 <>
-                  {/* ✅ NEW: Plate Number input (Pending/Returned) */}
+                  {/* ✅ Plate Number input (Pending/Returned) */}
                   <View style={styles.detailSection}>
                     <Text style={styles.sectionTitle}>Plate Number (Required)</Text>
                     <Text style={styles.auditHint}>Format: AB1234 (2 letters + 4 numbers)</Text>
@@ -1856,7 +1966,7 @@ const RiderScreen = ({ navigation, route }) => {
                       </TouchableOpacity>
                     )}
 
-                    {/* ✅ CHANGE #1: Renewal Date is automatic; no manual picker */}
+                    {/* Renewal Date is automatic; no manual picker */}
                     <View style={[styles.dateButton, styles.dateButtonDisabled]}>
                       <Feather name="calendar" size={20} color="#2E7D32" />
                       <Text style={styles.dateButtonText}>
@@ -1918,7 +2028,6 @@ const RiderScreen = ({ navigation, route }) => {
                 <View style={styles.detailSection}>
                   <Text style={styles.sectionTitle}>Validator Review</Text>
 
-                  {/* ✅ show plate also */}
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Plate:</Text>
                     <Text style={styles.detailValue}>
@@ -2016,7 +2125,6 @@ const RiderScreen = ({ navigation, route }) => {
                 <View style={styles.detailSection}>
                   <Text style={styles.sectionTitle}>For Inspection</Text>
 
-                  {/* ✅ show plate also */}
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Plate:</Text>
                     <Text style={styles.detailValue}>
@@ -2031,7 +2139,6 @@ const RiderScreen = ({ navigation, route }) => {
                     </Text>
                   </View>
 
-                  {/* ✅ FIX: show receipt + ebike photos here too */}
                   {renderValidatorVerificationPhotos()}
 
                   <Text style={[styles.sectionTitle, { marginTop: 10 }]}>Notes (optional)</Text>
@@ -2062,7 +2169,7 @@ const RiderScreen = ({ navigation, route }) => {
 
             </ScrollView>
 
-            {/* ✅ EBike selector sheet */}
+            {/* EBike selector sheet */}
             {showEbikeModal && (
               <View style={styles.categoryOverlay}>
                 <View style={styles.categorySheet}>
@@ -2106,7 +2213,7 @@ const RiderScreen = ({ navigation, route }) => {
               </View>
             )}
 
-            {/* ✅ Category mini-sheet (processing only) */}
+            {/* Category mini-sheet (processing only) */}
             {showCategoryModal && (
               <View style={styles.categoryOverlay}>
                 <View style={styles.categorySheet}>
@@ -2232,7 +2339,6 @@ const RiderScreen = ({ navigation, route }) => {
         <FlatList
           data={filteredRiders}
           renderItem={({ item }) => {
-            // ✅ align with fetch logic
             const tabEbikes = (item.ebikes || []).filter(e => {
               const ok = (e?.status || item.status) === tabStatus;
               if (!ok) return false;
@@ -2243,7 +2349,6 @@ const RiderScreen = ({ navigation, route }) => {
               return true;
             });
 
-            // ✅ FIX: show NO PLATE instead of N/A
             const firstPlate = tabEbikes[0]?.plateNumber
               ? String(tabEbikes[0].plateNumber).toUpperCase()
               : 'NO PLATE';
@@ -2269,7 +2374,6 @@ const RiderScreen = ({ navigation, route }) => {
                       {firstPlate}{more}
                     </Text>
 
-                    {/* ✅ RESTORED LIST INFO for Processing/Validator */}
                     {activeTab !== INSPECT_TAB ? (
                       <>
                         <Text style={styles.subInfoText}>
@@ -2723,7 +2827,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  // ✅ NEW: error style for plate
   errorText: {
     color: '#F44336',
     fontSize: 12,
@@ -2732,7 +2835,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  // ✅ Inspector checklist styles
   checkItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
