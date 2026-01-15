@@ -76,9 +76,11 @@ const getAdminTaskRole = (userData = {}) => {
 const getFriendlyAuthMessage = (code = "") => {
   const map = {
     "auth/invalid-email": "Please enter a valid email address.",
-    "auth/user-disabled": "This account has been disabled. Please contact the administrator.",
+    "auth/user-disabled":
+      "This account has been disabled. Please contact the administrator.",
     "auth/too-many-requests": "Too many attempts. Please try again later.",
-    "auth/network-request-failed": "Network error. Please check your internet connection.",
+    "auth/network-request-failed":
+      "Network error. Please check your internet connection.",
     "auth/user-not-found": "Invalid email or password.",
     "auth/wrong-password": "Invalid email or password.",
     "auth/invalid-credential": "Invalid email or password.",
@@ -242,7 +244,9 @@ export default function Login({ navigation }) {
         }
         throw new Error(data?.error || "Failed to send email");
       } catch (error) {
-        Alert.alert("Login Code Generated", `Your login code is:\n\n${code}`, [{ text: "OK" }]);
+        Alert.alert("Login Code Generated", `Your login code is:\n\n${code}`, [
+          { text: "OK" }
+        ]);
         return true;
       }
     } catch (error) {
@@ -480,7 +484,9 @@ export default function Login({ navigation }) {
 
         if (userSnapshot.size > 1) {
           await signOut(auth);
-          setLoginNotice("Multiple accounts found for this email. Please contact the administrator.");
+          setLoginNotice(
+            "Multiple accounts found for this email. Please contact the administrator."
+          );
           return;
         }
 
@@ -799,7 +805,9 @@ export default function Login({ navigation }) {
         <View style={styles.modalContainer}>
           <View style={styles.twoFAModalContent}>
             <Text style={styles.twoFATitle}>2-Step Verification</Text>
-            <Text style={styles.twoFASubtitle}>Enter the 6-digit login code sent to your email</Text>
+            <Text style={styles.twoFASubtitle}>
+              Enter the 6-digit login code sent to your email
+            </Text>
 
             <TextInput
               style={styles.twoFACodeInput}
@@ -910,16 +918,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 5
   },
+
+  // ✅ UPDATED: bigger header text
   welcome: {
     color: "#EAF7EE",
-    fontSize: 22,
+    fontSize: 26, // ✅ bigger
     fontWeight: "800",
     textAlign: "center",
     letterSpacing: 0.5
   },
   aide: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 22, // ✅ bigger
     fontWeight: "900",
     marginTop: 6,
     textAlign: "center",
