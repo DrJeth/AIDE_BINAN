@@ -1,3 +1,4 @@
+// Login.js
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -95,6 +96,10 @@ export default function Login({ navigation }) {
 
   const [showPassword, setShowPassword] = useState(false);
   const [loginNotice, setLoginNotice] = useState("");
+
+  // ✅ UI focus + error highlight
+  const [focusedField, setFocusedField] = useState(null); // "email" | "password" | null
+  const [fieldErrors, setFieldErrors] = useState({ email: false, password: false });
 
   // Email verification states
   const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
@@ -415,15 +420,21 @@ export default function Login({ navigation }) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const trimmedEmail = email.trim();
 
+    // ✅ reset error highlights
+    setFieldErrors({ email: false, password: false });
+
     if (!trimmedEmail) {
+      setFieldErrors({ email: true, password: false });
       setLoginNotice("Please enter your email.");
       return;
     }
     if (!emailRegex.test(trimmedEmail)) {
+      setFieldErrors({ email: true, password: false });
       setLoginNotice("Please enter a valid email address.");
       return;
     }
     if (!password.trim()) {
+      setFieldErrors({ email: false, password: true });
       setLoginNotice("Please enter your password.");
       return;
     }
@@ -545,6 +556,9 @@ export default function Login({ navigation }) {
     } catch (error) {
       const friendly = getFriendlyAuthMessage(error?.code);
       setLoginNotice(friendly);
+
+      // ✅ highlight both fields on auth failure (wrong password/user not found/etc.)
+      setFieldErrors({ email: true, password: true });
     } finally {
       setIsLoading(false);
     }
@@ -553,10 +567,12 @@ export default function Login({ navigation }) {
   // clear notice when typing
   const handleEmailChange = (v) => {
     setLoginNotice("");
+    setFieldErrors((p) => ({ ...p, email: false }));
     setEmail(v);
   };
   const handlePasswordChange = (v) => {
     setLoginNotice("");
+    setFieldErrors((p) => ({ ...p, password: false }));
     setPassword(v);
   };
 
@@ -574,10 +590,13 @@ export default function Login({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.fullGreen} />
+          <View style={styles.bgBlobOne} />
+          <View style={styles.bgBlobTwo} />
 
+          {/* ✅ Centered header */}
           <View style={styles.headerWrap}>
-            <Text style={styles.welcome}>WELCOME to</Text>
-            <Text style={styles.aide}>A.I.D.E BINAN</Text>
+            <Text style={styles.welcome}>Welcome to</Text>
+            <Text style={styles.aide}>A.I.D.E BIÑAN</Text>
           </View>
 
           <View style={[styles.cardWrapper, { width: CARD_WIDTH }]}>
@@ -590,9 +609,17 @@ export default function Login({ navigation }) {
             </View>
 
             <View style={styles.whiteCard}>
+              {/* ✅ Better form title */}
+              <Text style={styles.formTitle}>Sign in</Text>
+              <Text style={styles.formSubtitle}>Login to continue</Text>
+
               <Text style={styles.label}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  focusedField === "email" && styles.inputFocused,
+                  fieldErrors.email && styles.inputError
+                ]}
                 placeholder="Enter your Email"
                 placeholderTextColor="#9b9b9b"
                 value={email}
@@ -600,18 +627,26 @@ export default function Login({ navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 editable={!isLoading}
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
               />
 
               <Text style={[styles.label, { marginTop: 8 }]}>Password</Text>
               <View style={{ position: "relative" }}>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    focusedField === "password" && styles.inputFocused,
+                    fieldErrors.password && styles.inputError
+                  ]}
                   placeholder="Enter your password"
                   placeholderTextColor="#9b9b9b"
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={handlePasswordChange}
                   editable={!isLoading}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
                 />
 
                 <TouchableOpacity
@@ -619,7 +654,7 @@ export default function Login({ navigation }) {
                   style={{ position: "absolute", right: 14, top: 14, padding: 4 }}
                   disabled={isLoading}
                 >
-                  <Text style={{ color: "#2e7d32", fontWeight: "700" }}>
+                  <Text style={{ color: "#2e7d32", fontWeight: "800" }}>
                     {showPassword ? "Hide" : "Show"}
                   </Text>
                 </TouchableOpacity>
@@ -673,6 +708,8 @@ export default function Login({ navigation }) {
             setEmail("");
             setPassword("");
             setLoginNotice("");
+            setFieldErrors({ email: false, password: false });
+            setFocusedField(null);
             await signOut(auth); // security
           }
         }}
@@ -728,6 +765,8 @@ export default function Login({ navigation }) {
                   setEmail("");
                   setPassword("");
                   setLoginNotice("");
+                  setFieldErrors({ email: false, password: false });
+                  setFocusedField(null);
                   await signOut(auth);
                 }
               }}
@@ -751,6 +790,8 @@ export default function Login({ navigation }) {
             setEmail("");
             setPassword("");
             setLoginNotice("");
+            setFieldErrors({ email: false, password: false });
+            setFocusedField(null);
             await signOut(auth); // security
           }
         }}
@@ -785,10 +826,7 @@ export default function Login({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.resendButton,
-                twoFAResendCountdown > 0 && styles.resendButtonDisabled
-              ]}
+              style={[styles.resendButton, twoFAResendCountdown > 0 && styles.resendButtonDisabled]}
               onPress={handleResend2FA}
               disabled={isVerifying2FA || twoFAResendCountdown > 0}
             >
@@ -808,6 +846,8 @@ export default function Login({ navigation }) {
                   setEmail("");
                   setPassword("");
                   setLoginNotice("");
+                  setFieldErrors({ email: false, password: false });
+                  setFocusedField(null);
                   await signOut(auth);
                 }
               }}
@@ -831,20 +871,63 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 40
   },
+
   fullGreen: {
     position: "absolute",
     width: "100%",
     height: SCREEN_HEIGHT,
-    backgroundColor: "#16662f"
+    backgroundColor: "#16662f",
+    zIndex: 0
   },
+
+  // ✅ background blobs for nicer UI
+  bgBlobOne: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 260,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    top: 40,
+    left: -70,
+    zIndex: 1
+  },
+  bgBlobTwo: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderRadius: 300,
+    backgroundColor: "rgba(0,0,0,0.10)",
+    bottom: 60,
+    right: -90,
+    zIndex: 1
+  },
+
+  // ✅ centered header
   headerWrap: {
     width: "100%",
     paddingHorizontal: 26,
-    marginBottom: 10
+    marginBottom: 18,
+    alignItems: "center",
+    zIndex: 5
   },
-  welcome: { color: "#fff", fontSize: 26, fontWeight: "800" },
-  aide: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 4 },
-  cardWrapper: { marginTop: 30, alignItems: "center" },
+  welcome: {
+    color: "#EAF7EE",
+    fontSize: 22,
+    fontWeight: "800",
+    textAlign: "center",
+    letterSpacing: 0.5
+  },
+  aide: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 6,
+    textAlign: "center",
+    letterSpacing: 2
+  },
+
+  cardWrapper: { marginTop: 30, alignItems: "center", zIndex: 5 },
+
   sealHolder: {
     position: "absolute",
     top: -42,
@@ -852,57 +935,102 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     padding: 10,
     borderRadius: 80,
-    zIndex: 50
+    zIndex: 50,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)"
   },
   scooterMiddle: { width: 85, height: 85 },
+
   whiteCard: {
     width: "100%",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 22,
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 68,
     paddingBottom: 28,
+
+    // ✅ cleaner card (border + shadow)
     borderWidth: 1,
-    borderColor: "#cccccc",
-    elevation: 8
+    borderColor: "rgba(255,255,255,0.35)",
+
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10
   },
+
+  // ✅ small title inside card
+  formTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#183A22",
+    textAlign: "center",
+    marginBottom: 2
+  },
+  formSubtitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7C70",
+    textAlign: "center",
+    marginBottom: 14
+  },
+
   label: { fontWeight: "700", color: "#333", marginBottom: 6, marginLeft: 4 },
+
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: "#F6FAF7",
     height: 48,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#e3e3e3"
+    borderColor: "#E1E9E3",
+    color: "#1F2D24"
+  },
+  inputFocused: {
+    borderColor: "#2e7d32",
+    borderWidth: 2,
+    backgroundColor: "#FFFFFF"
+  },
+  inputError: {
+    borderColor: "#b00020",
+    borderWidth: 2,
+    backgroundColor: "#FFF5F5"
   },
 
   forgotRow: { alignItems: "flex-end", marginTop: -4, marginBottom: 4 },
-  forgotText: { fontSize: 12, color: "#2e7d32", fontWeight: "600" },
+  forgotText: { fontSize: 12, color: "#2e7d32", fontWeight: "700" },
 
   inlineNotice: {
     marginTop: 6,
     marginBottom: 4,
     color: "#b00020",
     fontSize: 12,
-    fontWeight: "700"
+    fontWeight: "800"
   },
 
   loginBtn: {
-    backgroundColor: "#124923",
-    paddingVertical: 13,
-    borderRadius: 22,
+    backgroundColor: "#2e7d32",
+    paddingVertical: 14,
+    borderRadius: 14,
     alignSelf: "center",
-    width: "65%",
+    width: "100%",
     alignItems: "center",
-    marginTop: 20
+    marginTop: 18,
+
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6
   },
   loginBtnDisabled: { opacity: 0.6 },
-  loginBtnText: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  loginBtnText: { color: "#fff", fontSize: 16, fontWeight: "900", letterSpacing: 0.6 },
 
-  signupRow: { marginTop: 20, flexDirection: "row", justifyContent: "center" },
+  signupRow: { marginTop: 18, flexDirection: "row", justifyContent: "center" },
   bottomText: { color: "#777" },
-  signUpText: { color: "#2e7d32", fontWeight: "700" },
+  signUpText: { color: "#2e7d32", fontWeight: "800" },
 
   modalContainer: {
     flex: 1,

@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>A.I.D.E. Biñan — Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="relative min-h-screen overflow-x-hidden bg-gradient-to-br from-emerald-50 via-white to-orange-50 text-slate-900">
+  <!-- Decorative background blobs -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+    <div class="absolute -top-28 -left-28 h-80 w-80 rounded-full bg-emerald-400/20 blur-3xl"></div>
+    <div class="absolute -bottom-28 -right-28 h-80 w-80 rounded-full bg-orange-400/20 blur-3xl"></div>
+    <div class="absolute top-1/3 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-slate-900/5 blur-3xl"></div>
+  </div>
+
+  <header class="sticky top-0 z-40 border-b border-slate-200/60 bg-white/70 backdrop-blur">
+    <div class="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div>
+          <div class="text-sm font-semibold">A.I.D.E. Biñan</div>
+          <div class="text-xs text-slate-500 -mt-0.5">Admin Portal</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <div
+          id="userBadge"
+          class="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs"
+        >
+          <span id="userEmail" class="font-medium text-slate-700"></span>
+          <span
+            id="userRole"
+            class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+          ></span>
+        </div>
+
+        <button
+          id="btnLogout"
+          class="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="relative mx-auto max-w-6xl px-4 py-10">
+    <!-- HOME -->
+    <section id="viewHome">
+      <div class="grid gap-8 lg:grid-cols-12 items-start">
+        <!-- Left: Hero -->
+        <div class="lg:col-span-7 space-y-5">
+          <div class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+            <span class="h-2 w-2 rounded-full bg-emerald-600"></span>
+            Secure access • Role-based admin tools
+          </div>
+
+          <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">
+            A.I.D.E. Biñan
+            <span class="block bg-gradient-to-r from-emerald-700 to-orange-600 bg-clip-text text-transparent">
+              Admin Website
+            </span>
+          </h1>
+
+          <p class="text-slate-600 text-base sm:text-lg max-w-xl">
+            Monitor riders, manage admin accounts, and keep workflows clean—built for a smooth, modern experience.
+          </p>
+
+          <div class="max-w-md">
+            <button
+              id="goLogin"
+              class="w-full rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 hover:from-slate-800 hover:to-slate-700 active:scale-[0.99] transition"
+            >
+              Super Admin Login
+            </button>
+
+            <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+              <span>Only Admin / Super Admin can access.</span>
+              <span class="inline-flex items-center gap-1">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                Firebase Auth ready
+              </span>
+            </div>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-3 max-w-xl pt-2">
+            <div class="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
+              <div class="text-xs font-semibold text-slate-900">Realtime Monitoring</div>
+              <div class="text-xs text-slate-500 mt-1">View riders + status fast.</div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
+              <div class="text-xs font-semibold text-slate-900">Role-Based UI</div>
+              <div class="text-xs text-slate-500 mt-1">Super Admin tools only.</div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
+              <div class="text-xs font-semibold text-slate-900">Clean Workflow</div>
+              <div class="text-xs text-slate-500 mt-1">Simple steps, less clutter.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Creative preview panel -->
+        <div class="lg:col-span-5">
+          <div class="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold">Quick Flow</div>
+                <div class="text-xs text-slate-500 mt-1">A smooth 3-step experience</div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                Admin Portal
+              </div>
+            </div>
+
+            <div class="mt-5 space-y-3">
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 h-7 w-7 rounded-2xl bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">
+                  1
+                </div>
+                <div>
+                  <div class="text-sm font-semibold">Login</div>
+                  <div class="text-xs text-slate-500">Authenticate using Admin credentials.</div>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 h-7 w-7 rounded-2xl bg-slate-900 text-white text-xs font-bold flex items-center justify-center">
+                  2
+                </div>
+                <div>
+                  <div class="text-sm font-semibold">Riders List</div>
+                  <div class="text-xs text-slate-500">Search, filter, and track statuses.</div>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 h-7 w-7 rounded-2xl bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
+                  3
+                </div>
+                <div>
+                  <div class="text-sm font-semibold">Admin Accounts</div>
+                  <div class="text-xs text-slate-500">Super Admin can create/edit/delete.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-6 rounded-3xl border border-slate-200 bg-white p-4">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-semibold text-slate-700">Panel Preview</div>
+                <div class="flex items-center gap-1">
+                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                  <span class="h-2 w-2 rounded-full bg-orange-400"></span>
+                  <span class="h-2 w-2 rounded-full bg-slate-300"></span>
+                </div>
+              </div>
+
+              <div class="mt-3 space-y-2">
+                <div class="h-9 rounded-2xl bg-slate-100"></div>
+                <div class="grid grid-cols-3 gap-2">
+                  <div class="h-14 rounded-2xl bg-emerald-50 border border-emerald-100"></div>
+                  <div class="h-14 rounded-2xl bg-orange-50 border border-orange-100"></div>
+                  <div class="h-14 rounded-2xl bg-slate-50 border border-slate-200"></div>
+                </div>
+                <div class="h-20 rounded-2xl bg-slate-50 border border-slate-200"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOGIN -->
+    <section id="viewLogin" class="hidden">
+      <div class="mx-auto max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 class="text-xl font-bold">Admin Login</h2>
+        <p class="text-sm text-slate-600 mt-1">Only Admin / Super Admin can access this portal.</p>
+
+        <div class="mt-5 space-y-3">
+          <div>
+            <label class="text-sm font-semibold">Email</label>
+            <input
+              id="loginEmail"
+              type="email"
+              class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:ring-2 focus:ring-emerald-100"
+            />
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">Password</label>
+            <input
+              id="loginPass"
+              type="password"
+              class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:ring-2 focus:ring-emerald-100"
+            />
+          </div>
+
+          <button
+            id="btnLogin"
+            class="w-full rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Login
+          </button>
+
+          <button
+            id="backHome"
+            class="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold hover:bg-slate-50"
+          >
+            Back to Home
+          </button>
+
+          <!-- ✅ RED style for validation/errors -->
+          <div
+            id="loginMsg"
+            class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          ></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="viewDashboard" class="hidden">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-bold">Admin Panel</h2>
+          <p class="text-sm text-slate-600">Realtime riders monitoring + admin management.</p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="tabBtn rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            data-tab="riders"
+          >
+            Riders
+          </button>
+
+          <button
+            class="tabBtn rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+            data-tab="admins"
+          >
+            Admins
+          </button>
+
+          <button
+            id="tabCreateAdmin"
+            class="tabBtn hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+            data-tab="create"
+          >
+            Create Admin
+          </button>
+
+          <button
+            id="btnRefresh"
+            class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- RIDERS TAB -->
+      <div id="tabRiders" class="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm font-semibold">Riders</div>
+
+          <!-- ✅ Download + count -->
+          <div class="flex items-center gap-2">
+            <button
+              id="btnDownloadRidersListPdf"
+              type="button"
+              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50"
+            >
+              Download Riders List PDF
+            </button>
+
+            <div id="riderCount" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              0
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <input
+            id="riderSearch"
+            placeholder="Search name / email / plate..."
+            class="w-full sm:max-w-sm rounded-2xl border border-slate-200 px-4 py-2 outline-none"
+          />
+
+          <select
+            id="riderStatus"
+            class="w-full sm:w-48 rounded-2xl border border-slate-200 px-4 py-2 outline-none"
+          >
+            <option value="ALL">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Pending">Pending</option>
+            <option value="Verified">Verified</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-left text-xs text-slate-500">
+              <tr>
+                <th class="py-2 pr-4">Name</th>
+                <th class="py-2 pr-4">Email</th>
+                <th class="py-2 pr-4">Contact</th>
+                <th class="py-2 pr-4">Plate</th>
+                <th class="py-2 pr-4">Status</th>
+              </tr>
+            </thead>
+            <tbody id="riderRows" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+
+        <div
+          id="ridersEmpty"
+          class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+        >
+          No riders found.
+        </div>
+      </div>
+
+      <!-- ADMINS TAB -->
+      <div id="tabAdmins" class="hidden mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm font-semibold">Admin Accounts</div>
+
+          <!-- ✅ Download + count -->
+          <div class="flex items-center gap-2">
+            <button
+              id="btnDownloadAdminsListPdf"
+              type="button"
+              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50"
+            >
+              Download Admins List PDF
+            </button>
+
+            <div id="adminCount" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              0
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-left text-xs text-slate-500">
+              <tr>
+                <th class="py-2 pr-4">Name</th>
+                <th class="py-2 pr-4">Email</th>
+                <th class="py-2 pr-4">Role</th>
+                <th class="py-2 pr-4">Position</th>
+              </tr>
+            </thead>
+            <tbody id="adminRows" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+
+        <div
+          id="adminsEmpty"
+          class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+        >
+          No admins found.
+        </div>
+      </div>
+
+      <!-- CREATE ADMIN TAB -->
+      <div id="tabCreate" class="hidden mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-sm">
+        <div class="text-sm font-semibold text-emerald-900">Create Admin</div>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <input
+            id="caFirst"
+            placeholder="First Name"
+            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
+          />
+          <input
+            id="caLast"
+            placeholder="Last Name"
+            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
+          />
+          <input
+            id="caEmail"
+            placeholder="Email"
+            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
+          />
+          <input
+            id="caPass"
+            type="password"
+            placeholder="Password"
+            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
+          />
+
+          <select
+            id="caTaskRole"
+            class="sm:col-span-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
+          >
+            <option value="processor">Processing</option>
+            <option value="validator">Validator</option>
+            <option value="inspector">Inspector</option>
+          </select>
+
+          <input
+            id="caPos"
+            placeholder="Position (optional)"
+            class="sm:col-span-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
+          />
+        </div>
+
+        <div class="mt-4 flex gap-2">
+          <button
+            id="btnCreateAdmin"
+            class="rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-800"
+          >
+            Create Admin
+          </button>
+
+          <button
+            id="btnClearCreate"
+            class="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div
+          id="createMsg"
+          class="hidden mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-900"
+        ></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Edit Admin Modal -->
+  <div id="editAdminModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/40 p-4">
+    <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-lg font-bold">Edit Admin</div>
+          <div class="text-xs text-slate-500 mt-0.5">Super Admin only</div>
+        </div>
+
+        <button
+          id="btnCloseEditAdmin"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50"
+        >
+          Close
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        <div class="text-sm">
+          <span class="font-semibold">Email:</span>
+          <span id="eaEmailLabel" class="text-slate-700"></span>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="text-sm font-semibold">First Name</label>
+            <input id="eaFirst" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none" />
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">Last Name</label>
+            <input id="eaLast" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none" />
+          </div>
+
+          <div class="sm:col-span-2">
+            <label class="text-sm font-semibold">Role</label>
+            <select id="eaTaskRole" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none">
+              <option value="processor">Processing</option>
+              <option value="validator">Validator</option>
+              <option value="inspector">Inspector</option>
+            </select>
+            <div class="text-[11px] text-slate-500 mt-1">Note: Super Admin role is not editable here.</div>
+          </div>
+
+          <div class="sm:col-span-2">
+            <label class="text-sm font-semibold">Position (optional)</label>
+            <input id="eaPos" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none" />
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            id="btnSaveEditAdmin"
+            class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Save Changes
+          </button>
+
+          <button
+            id="btnDeleteAdmin"
+            class="rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+          >
+            Delete Admin
+          </button>
+        </div>
+
+        <div
+          id="editAdminMsg"
+          class="hidden mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"
+        ></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ PDF libs (required for download) -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- ✅ Login validation + red highlights (works with main.js) -->
+  <script>
+    (function () {
+      const viewLogin = document.getElementById("viewLogin");
+      const email = document.getElementById("loginEmail");
+      const pass = document.getElementById("loginPass");
+      const btn = document.getElementById("btnLogin");
+      const msg = document.getElementById("loginMsg");
+
+      if (!email || !pass || !btn || !msg) return;
+
+      const invalidAdd = ["border-red-400", "ring-2", "ring-red-200", "bg-red-50"];
+
+      function isLoginVisible() {
+        return viewLogin ? !viewLogin.classList.contains("hidden") : true;
+      }
+
+      function setInvalid(el, on) {
+        if (!el) return;
+        if (on) {
+          el.classList.add(...invalidAdd);
+          el.classList.remove("border-slate-200");
+        } else {
+          el.classList.remove(...invalidAdd);
+          if (!el.classList.contains("border-slate-200")) el.classList.add("border-slate-200");
+        }
+      }
+
+      function showMsg(text) {
+        msg.textContent = text;
+        msg.classList.remove("hidden");
+      }
+
+      function hideMsg() {
+        msg.textContent = "";
+        msg.classList.add("hidden");
+      }
+
+      function classifyAuthText(t) {
+        const s = String(t || "").toLowerCase();
+
+        if (s.includes("auth/wrong-password") || (s.includes("wrong") && s.includes("password"))) return "WRONG_PASSWORD";
+        if (s.includes("auth/invalid-credential") || s.includes("auth/invalid-login-credentials") || s.includes("invalid credential")) return "INVALID_CREDENTIAL";
+        if (s.includes("auth/user-not-found") || (s.includes("user") && (s.includes("not found") || s.includes("no user")))) return "USER_NOT_FOUND";
+        if (s.includes("auth/too-many-requests") || s.includes("too-many-requests")) return "TOO_MANY_REQUESTS";
+
+        return "GENERIC";
+      }
+
+      function setError(type, customText) {
+        setInvalid(email, false);
+        setInvalid(pass, false);
+
+        let text = customText || "Login failed. Please try again.";
+
+        if (type === "EMPTY_BOTH") {
+          setInvalid(email, true);
+          setInvalid(pass, true);
+          text = "Please enter your email and password.";
+        } else if (type === "EMPTY_EMAIL") {
+          setInvalid(email, true);
+          text = "Email is required.";
+        } else if (type === "EMPTY_PASS") {
+          setInvalid(pass, true);
+          text = "Password is required.";
+        } else if (type === "INVALID_EMAIL") {
+          setInvalid(email, true);
+          text = "Please enter a valid email.";
+        } else if (type === "WRONG_PASSWORD") {
+          setInvalid(pass, true);
+          text = "Wrong password. Please try again.";
+        } else if (type === "USER_NOT_FOUND") {
+          setInvalid(email, true);
+          text = "Account not found. Please check your email.";
+        } else if (type === "INVALID_CREDENTIAL") {
+          setInvalid(email, true);
+          setInvalid(pass, true);
+          text = "Invalid email or password. Please try again.";
+        } else if (type === "TOO_MANY_REQUESTS") {
+          setInvalid(email, true);
+          setInvalid(pass, true);
+          text = "Too many attempts. Please try again later.";
+        }
+
+        showMsg(text);
+      }
+
+      // remove red highlight when typing
+      [email, pass].forEach((el) => {
+        el.addEventListener("input", () => {
+          setInvalid(el, false);
+          if (!msg.classList.contains("hidden")) hideMsg();
+        });
+        el.addEventListener("blur", () => {
+          if (el === email) email.value = email.value.trim();
+        });
+      });
+
+      // ✅ on click login -> validate empty/invalid THEN block
+      btn.addEventListener(
+        "click",
+        (e) => {
+          if (!isLoginVisible()) return;
+
+          const em = email.value.trim();
+          const pw = pass.value;
+
+          setInvalid(email, false);
+          setInvalid(pass, false);
+          hideMsg();
+
+          if (!em && !pw) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            setError("EMPTY_BOTH");
+            return;
+          }
+          if (!em) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            setError("EMPTY_EMAIL");
+            return;
+          }
+          if (!pw) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            setError("EMPTY_PASS");
+            return;
+          }
+
+          if (email.type === "email" && !email.checkValidity()) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            setError("INVALID_EMAIL");
+            return;
+          }
+
+          // ✅ valid inputs -> allow main.js to handle login normally
+        },
+        true
+      );
+
+      // ✅ if main.js updates #loginMsg, apply highlight
+      const obs = new MutationObserver(() => {
+        if (!isLoginVisible()) return;
+        if (msg.classList.contains("hidden")) return;
+
+        const kind = classifyAuthText(msg.textContent || "");
+        if (kind === "WRONG_PASSWORD") return setError("WRONG_PASSWORD");
+        if (kind === "USER_NOT_FOUND") return setError("USER_NOT_FOUND");
+        if (kind === "INVALID_CREDENTIAL") return setError("INVALID_CREDENTIAL");
+        if (kind === "TOO_MANY_REQUESTS") return setError("TOO_MANY_REQUESTS");
+
+        setInvalid(email, true);
+        setInvalid(pass, true);
+      });
+
+      obs.observe(msg, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+
+      // ✅ if main.js uses alert() for auth errors -> keep alert AND add red highlight + message
+      const originalAlert = window.alert;
+      window.alert = function (text) {
+        try {
+          if (isLoginVisible()) {
+            const kind = classifyAuthText(text);
+
+            if (kind === "WRONG_PASSWORD") setError("WRONG_PASSWORD");
+            else if (kind === "USER_NOT_FOUND") setError("USER_NOT_FOUND");
+            else if (kind === "INVALID_CREDENTIAL") setError("INVALID_CREDENTIAL");
+            else if (kind === "TOO_MANY_REQUESTS") setError("TOO_MANY_REQUESTS");
+            else {
+              setInvalid(email, true);
+              setInvalid(pass, true);
+              showMsg(String(text || "Login failed. Please try again."));
+            }
+          }
+        } catch (err) {}
+
+        return originalAlert.call(window, text);
+      };
+    })();
+  </script>
+
+  <!-- ✅ Your existing app logic -->
+  <script type="module" src="/src/main.js"></script>
+
+  <!-- ✅ PDF FEATURES (list downloads) -->
+  <script>
+    (function () {
+      function getJsPDF() {
+        return window && window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF : null;
+      }
+
+      function stamp() {
+        const d = new Date();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${d.getFullYear()}${mm}${dd}`;
+      }
+
+      function isVisibleRow(tr) {
+        return !!(tr && tr.offsetParent !== null);
+      }
+
+      function getRidersListRows() {
+        const body = document.getElementById("riderRows");
+        if (!body) return [];
+        const rows = [];
+        body.querySelectorAll("tr").forEach(tr => {
+          if (!isVisibleRow(tr)) return;
+          const tds = tr.querySelectorAll("td");
+          const name = (tds[0]?.textContent || "").trim();
+          const email = (tds[1]?.textContent || "").trim();
+          const contact = (tds[2]?.textContent || "").trim();
+          const plate = (tds[3]?.textContent || "").trim();
+          const status = (tds[4]?.textContent || "").trim();
+          if (!name && !email && !contact && !plate && !status) return;
+          rows.push([name, email, contact, plate, status]);
+        });
+        return rows;
+      }
+
+      function downloadRidersListPdf() {
+        const JsPDF = getJsPDF();
+        if (!JsPDF) return alert("PDF library not loaded. Check your internet connection.");
+
+        const rows = getRidersListRows();
+        if (!rows.length) return alert("No riders to export.");
+
+        const pdf = new JsPDF({ unit: "pt", format: "a4" });
+
+        const search = (document.getElementById("riderSearch")?.value || "").trim();
+        const status = (document.getElementById("riderStatus")?.value || "ALL").trim();
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(14);
+        pdf.text("A.I.D.E. Biñan — Riders List", 40, 45);
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, 40, 62);
+        pdf.text(`Filters: Status=${status}${search ? `, Search="${search}"` : ""}`, 40, 76);
+
+        if (typeof pdf.autoTable === "function") {
+          pdf.autoTable({
+            startY: 95,
+            head: [["Name", "Email", "Contact", "Plate", "Status"]],
+            body: rows,
+            styles: { fontSize: 9, cellPadding: 6 },
+            headStyles: { fillColor: [15, 23, 42] },
+            margin: { left: 40, right: 40 }
+          });
+        } else {
+          let y = 95;
+          pdf.text("Name | Email | Contact | Plate | Status", 40, y);
+          y += 14;
+          rows.forEach(r => {
+            pdf.text(r.join(" | ").slice(0, 120), 40, y);
+            y += 12;
+            if (y > 780) { pdf.addPage(); y = 55; }
+          });
+        }
+
+        pdf.save(`Riders_List_${stamp()}.pdf`);
+      }
+
+      function getAdminsListRows() {
+        const body = document.getElementById("adminRows");
+        if (!body) return [];
+        const rows = [];
+        body.querySelectorAll("tr").forEach(tr => {
+          if (!isVisibleRow(tr)) return;
+          const tds = tr.querySelectorAll("td");
+          const name = (tds[0]?.textContent || "").trim();
+          const email = (tds[1]?.textContent || "").trim();
+          const role = (tds[2]?.textContent || "").trim();
+          const pos = (tds[3]?.textContent || "").trim();
+          if (!name && !email && !role && !pos) return;
+          rows.push([name, email, role, pos]);
+        });
+        return rows;
+      }
+
+      function downloadAdminsListPdf() {
+        const JsPDF = getJsPDF();
+        if (!JsPDF) return alert("PDF library not loaded. Check your internet connection.");
+
+        const rows = getAdminsListRows();
+        if (!rows.length) return alert("No admins to export.");
+
+        const pdf = new JsPDF({ unit: "pt", format: "a4" });
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(14);
+        pdf.text("A.I.D.E. Biñan — Admins List", 40, 45);
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, 40, 62);
+
+        if (typeof pdf.autoTable === "function") {
+          pdf.autoTable({
+            startY: 85,
+            head: [["Name", "Email", "Role", "Position"]],
+            body: rows,
+            styles: { fontSize: 9, cellPadding: 6 },
+            headStyles: { fillColor: [15, 23, 42] },
+            margin: { left: 40, right: 40 }
+          });
+        } else {
+          let y = 85;
+          pdf.text("Name | Email | Role | Position", 40, y);
+          y += 14;
+          rows.forEach(r => {
+            pdf.text(r.join(" | ").slice(0, 120), 40, y);
+            y += 12;
+            if (y > 780) { pdf.addPage(); y = 55; }
+          });
+        }
+
+        pdf.save(`Admins_List_${stamp()}.pdf`);
+      }
+
+      document.addEventListener("click", function (e) {
+        if (e.target.closest("#btnDownloadRidersListPdf")) {
+          downloadRidersListPdf();
+          return;
+        }
+        if (e.target.closest("#btnDownloadAdminsListPdf")) {
+          downloadAdminsListPdf();
+          return;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
