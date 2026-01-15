@@ -38,12 +38,37 @@ export default function Me({ navigation }) {
   });
 
   const [userRole, setUserRole] = useState(null);
+  const [userRoleLabel, setUserRoleLabel] = useState(""); // ADDED for display label
   const [userDocId, setUserDocId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
+
+  // build role label using Firestore field adminTaskRole
+  // adminTaskRole values expected: "processing" | "validator" | "inspector"
+  const buildRoleLabel = (data) => {
+    const adminTask = (data?.adminTaskRole || "").toString().trim(); // ✅ IMPORTANT FIELD
+    const rawRole = (data?.role || (adminTask ? "Admin" : "Rider")).toString().trim();
+
+    // If not admin, show role as-is
+    if (rawRole.toLowerCase() !== "admin") return rawRole;
+
+    const typeRaw = adminTask.toLowerCase();
+
+    const typeMap = {
+      processing: "Processing",
+      validator: "Validator",
+      inspector: "Inspector"
+    };
+
+    const type = typeMap[typeRaw] || "";
+
+    return type
+      ? `Admin - ${type} of E-Bike Registration`
+      : "Admin - E-Bike Registration";
+  };
 
   useEffect(() => {
     const auth = getAuth(app);
@@ -66,14 +91,20 @@ export default function Me({ navigation }) {
             finalDocId = userDocSnap.id;
           }
 
-          // 2) If missing/no role, find by email and choose doc with role
-          if (!finalData || !finalData.role) {
+          // 2) If missing/no role, find by email and choose doc with role/adminTaskRole
+          if (!finalData || (!finalData.role && !finalData.adminTaskRole)) {
             const q = query(usersRef, where("email", "==", user.email));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
-              const docWithRole = querySnapshot.docs.find(d => !!d.data().role);
-              const chosenDoc = docWithRole || querySnapshot.docs[0];
+              // PRIORITY: choose document that has adminTaskRole (best indicator of admin type)
+              const docWithAdminTaskRole = querySnapshot.docs.find(d => {
+                const dt = d.data() || {};
+                return !!dt.adminTaskRole;
+              });
+
+              const docWithRole = querySnapshot.docs.find(d => !!(d.data() || {}).role);
+              const chosenDoc = docWithAdminTaskRole || docWithRole || querySnapshot.docs[0];
 
               finalData = chosenDoc.data();
               finalDocId = chosenDoc.id;
@@ -92,8 +123,13 @@ export default function Me({ navigation }) {
               address: finalData.address || ""
             });
 
-            const role = finalData.role || "Rider";
+            // role fallback: if adminTaskRole exists, treat as Admin
+            const role = finalData.role || (finalData.adminTaskRole ? "Admin" : "Rider");
             setUserRole(role);
+
+            // label uses adminTaskRole
+            setUserRoleLabel(buildRoleLabel({ ...finalData, role }));
+
             setUserDocId(finalDocId || user.uid);
           } else {
             setUserData({
@@ -105,12 +141,14 @@ export default function Me({ navigation }) {
               address: ""
             });
             setUserRole("Rider");
+            setUserRoleLabel("Rider");
             setUserDocId(user.uid);
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
           Alert.alert("Error", "Could not fetch user data");
           setUserRole("Rider");
+          setUserRoleLabel("Rider");
           setUserDocId(user?.uid ?? null);
         } finally {
           setLoading(false);
@@ -142,7 +180,16 @@ export default function Me({ navigation }) {
 
   const handleUpdateUser = (updatedData) => {
     setUserData(prev => ({ ...prev, ...updatedData }));
+
+    // update role too (supports role/adminTaskRole updates)
+    const role = updatedData.role || userRole || (updatedData.adminTaskRole ? "Admin" : "Rider");
     if (updatedData.role) setUserRole(updatedData.role);
+    else if (updatedData.adminTaskRole && userRole !== "Admin") setUserRole("Admin");
+
+    // rebuild label after update
+    const merged = { ...userData, ...updatedData, role };
+    setUserRoleLabel(buildRoleLabel(merged));
+
     setIsEditModalVisible(false);
   };
 
@@ -183,9 +230,9 @@ export default function Me({ navigation }) {
             <Text style={styles.name}>{getFullName()}</Text>
             <Text style={styles.email}>{userData.email}</Text>
 
-            {userRole && (
+            {!!userRoleLabel && (
               <Text style={[styles.roleTag, isRider && styles.riderTag]}>
-                {userRole}
+                {userRoleLabel}
               </Text>
             )}
           </View>
@@ -219,7 +266,7 @@ export default function Me({ navigation }) {
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
-            {/* ✅ Contact Us removed */}
+            {/* Contact Us removed */}
           </View>
 
           <View style={styles.card}>
@@ -230,7 +277,7 @@ export default function Me({ navigation }) {
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
-            {/* ✅ Delete Account REMOVED for BOTH Rider and Admin */}
+            {/* Delete Account REMOVED for BOTH Rider and Admin */}
 
             <TouchableOpacity onPress={onLogout} style={[styles.row, styles.rowDanger]}>
               <Text style={[styles.rowText, styles.dangerText]}>Log Out</Text>
@@ -354,7 +401,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
-    borderRadius: 12
+    borderRadius: 12,
+    textAlign: "center"
   },
   riderTag: {
     backgroundColor: "#1565c0"

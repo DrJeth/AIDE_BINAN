@@ -1,5 +1,4 @@
-// HomeRider.js
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -10,7 +9,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Linking,
   Modal,
   ActivityIndicator,
   TextInput,
@@ -42,13 +40,9 @@ const HomeIcon = require("../../assets/home.png");
 const ScheduleIcon = require("../../assets/schedule.png");
 const UserIcon = require("../../assets/user.png");
 
-// ✅ Green Route Advisory Image
-const GreenRouteAdvisory = require("../../assets/green-e-route-advisory.jpg");
-
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const CAROUSEL_WIDTH = SCREEN_WIDTH - 40; // because container marginHorizontal = 20 (20 + 20)
 
-/** ✅ UPDATED categories (support NEW + LEGACY values) */
+/** UPDATED categories (support NEW + LEGACY values) */
 const EBIKE_CATEGORIES = [
   // New (your admin side)
   { label: "CATEGORY L1A", value: "L1A" },
@@ -126,7 +120,7 @@ const getCategoryLabel = (value) => {
   return found ? found.label : value;
 };
 
-/** ✅ Normalize ebikes (supports NEW schema + LEGACY single fields) */
+/** Normalize ebikes (supports NEW schema + LEGACY single fields) */
 const normalizeUserEbikes = (userData) => {
   if (Array.isArray(userData?.ebikes) && userData.ebikes.length > 0) {
     return userData.ebikes.map((e, idx) => ({
@@ -191,7 +185,7 @@ const normalizeUserEbikes = (userData) => {
   ];
 };
 
-/** ✅ Transactions latest -> oldest */
+/**  Transactions latest -> oldest */
 const getEbikeTransactions = (ebike) => {
   const tx = Array.isArray(ebike?.transactionHistory) ? [...ebike.transactionHistory] : [];
 
@@ -225,11 +219,11 @@ export default function HomeRider({ navigation }) {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [notifVisible, setNotifVisible] = useState(false);
 
-  // ✅ multiple ebikes
+  //  multiple ebikes
   const [selectedEbikeId, setSelectedEbikeId] = useState(null);
   const [showEbikePicker, setShowEbikePicker] = useState(false);
 
-  // ✅ ADD NEW EBIKE modal
+  // ADD NEW EBIKE modal
   const [addEbikeVisible, setAddEbikeVisible] = useState(false);
   const [addEbikeLoading, setAddEbikeLoading] = useState(false);
   const [addNoPlateNumber, setAddNoPlateNumber] = useState(false);
@@ -254,50 +248,47 @@ export default function HomeRider({ navigation }) {
   ]);
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
 
-  // ✅ Notifications: appointment + registration (system)
+  //  Notifications: appointment + registration (system)
   const [appointmentNotifs, setAppointmentNotifs] = useState([]);
   const [registrationNotifs, setRegistrationNotifs] = useState([]);
 
-  // ✅ Seen tracker (badge count)
+  //  Seen tracker (badge count)
   const [notifLastSeen, setNotifLastSeen] = useState({
     announcements: null,
     appointment: null,
     registration: null
   });
 
-  // ✅ Carousel (Advisory image + map)
-  const carouselRef = useRef(null);
-  const [carouselIndex, setCarouselIndex] = useState(0);
-
-  // ✅ ZOOM modal for Green Route picture (Slide 1)
-  const [greenZoomVisible, setGreenZoomVisible] = useState(false);
-  const [greenZoomScale, setGreenZoomScale] = useState(1);
+  //  IMAGE VIEWER (for receipts / ebike photos / uploaded docs) — IN-APP PREVIEW ✅
+  const [imgViewerVisible, setImgViewerVisible] = useState(false);
+  const [imgViewerUrl, setImgViewerUrl] = useState(null);
+  const [imgViewerTitle, setImgViewerTitle] = useState("");
+  const [imgViewerScale, setImgViewerScale] = useState(1);
 
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
-  const openGreenZoom = () => {
-    setGreenZoomScale(1);
-    setGreenZoomVisible(true);
-  };
-  const closeGreenZoom = () => {
-    setGreenZoomVisible(false);
-    setGreenZoomScale(1);
-  };
-  const zoomIn = () =>
-    setGreenZoomScale((s) => clamp(Number((s + 0.25).toFixed(2)), 1, 3));
-  const zoomOut = () =>
-    setGreenZoomScale((s) => clamp(Number((s - 0.25).toFixed(2)), 1, 3));
-
-  const onCarouselScrollEnd = (e) => {
-    const x = e.nativeEvent.contentOffset.x;
-    const index = Math.round(x / CAROUSEL_WIDTH);
-    setCarouselIndex(index);
+  const openImageViewer = (url, title = "Preview") => {
+    if (!url) {
+      Alert.alert("No Image", "Image URL is missing.");
+      return;
+    }
+    setImgViewerTitle(title);
+    setImgViewerUrl(url);
+    setImgViewerScale(1);
+    setImgViewerVisible(true);
   };
 
-  const goToSlide = (index) => {
-    setCarouselIndex(index);
-    carouselRef.current?.scrollTo({ x: index * CAROUSEL_WIDTH, animated: true });
+  const closeImageViewer = () => {
+    setImgViewerVisible(false);
+    setImgViewerScale(1);
+    setImgViewerUrl(null);
+    setImgViewerTitle("");
   };
+
+  const viewerZoomIn = () =>
+    setImgViewerScale((s) => clamp(Number((s + 0.25).toFixed(2)), 1, 3));
+  const viewerZoomOut = () =>
+    setImgViewerScale((s) => clamp(Number((s - 0.25).toFixed(2)), 1, 3));
 
   const auth = getAuth();
   const db = getFirestore();
@@ -383,7 +374,7 @@ export default function HomeRider({ navigation }) {
 
       const plate = addNoPlateNumber ? null : addEbikeForm.plateNumber.trim().toUpperCase();
 
-      // ✅ local duplicate vs YOUR current ebikes
+      //  local duplicate vs YOUR current ebikes
       if (plate) {
         const dupLocal = ebikes.some((e) => String(e?.plateNumber || "").toUpperCase() === plate);
         if (dupLocal) {
@@ -394,7 +385,7 @@ export default function HomeRider({ navigation }) {
 
       setAddEbikeLoading(true);
 
-      // ✅ global uniqueness check (ignore sariling doc)
+      //  global uniqueness check (ignore sariling doc)
       if (plate) {
         const plateQ = query(collection(db, "users"), where("plateNumbers", "array-contains", plate));
         const plateSnap = await getDocs(plateQ);
@@ -472,7 +463,7 @@ export default function HomeRider({ navigation }) {
         });
       });
 
-      // ✅ update local state
+      //  update local state
       setUserData((prev) => {
         const prevSafe = prev || {};
         const prevEbikesNorm = Array.isArray(prevSafe.ebikes) ? prevSafe.ebikes : [];
@@ -553,7 +544,7 @@ export default function HomeRider({ navigation }) {
     }
   };
 
-  // ✅ Refresh announcements (keeps old behavior but adds createdAtMs for badge)
+  // Refresh announcements (keeps old behavior but adds createdAtMs for badge)
   const refreshAnnouncements = async () => {
     try {
       const newsQuery = query(collection(db, "announcements"), orderBy("createdAt", "desc"));
@@ -582,7 +573,7 @@ export default function HomeRider({ navigation }) {
     }
   };
 
-  // ✅ Appointment notifications (Accepted / Rejected)
+  // Appointment notifications (Accepted / Rejected)
   const normalizeAppointmentStatus = (raw) => {
     const s = (raw ?? "").toString().trim().toLowerCase();
     if (!s) return null;
@@ -680,7 +671,7 @@ export default function HomeRider({ navigation }) {
     }
   };
 
-  // ✅ Build registration verified/rejected notifications from userData
+  // Build registration verified/rejected notifications from userData
   useEffect(() => {
     try {
       if (!userData) {
@@ -723,14 +714,14 @@ export default function HomeRider({ navigation }) {
     }
   }, [userData]);
 
-  // ✅ System notifications combined
+  //  System notifications combined
   const systemNotifs = useMemo(() => {
     const all = [...(appointmentNotifs || []), ...(registrationNotifs || [])];
     all.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
     return all;
   }, [appointmentNotifs, registrationNotifs]);
 
-  // ✅ Unread count for badge
+  // Unread count for badge
   const unreadCount = useMemo(() => {
     const annSeen = toMs(notifLastSeen?.announcements) ?? 0;
     const apptSeen = toMs(notifLastSeen?.appointment) ?? 0;
@@ -754,7 +745,7 @@ export default function HomeRider({ navigation }) {
     return count;
   }, [newsUpdates, systemNotifs, notifLastSeen]);
 
-  // ✅ Open notifications: mark all as seen (badge disappears after viewing)
+  // Open notifications: mark all as seen (badge disappears after viewing)
   const openNotifications = async () => {
     setNotifVisible(true);
 
@@ -817,7 +808,7 @@ export default function HomeRider({ navigation }) {
 
           if (ebikes.length > 0) setSelectedEbikeId(ebikes[0].id);
 
-          // ✅ initialize notifLastSeen if missing (so first time = no badge spam)
+          // initialize notifLastSeen if missing (so first time = no badge spam)
           const existingSeen = data?.notifLastSeen;
           if (existingSeen && (existingSeen.announcements || existingSeen.appointment || existingSeen.registration)) {
             setNotifLastSeen({
@@ -838,7 +829,7 @@ export default function HomeRider({ navigation }) {
 
           await loadRiderDocuments(foundDocId);
 
-          // ✅ fetch appointment notifs after we know ids
+          // fetch appointment notifs after we know ids
           await refreshAppointmentNotifs(currentUser.uid, foundDocId);
         }
       } catch (error) {
@@ -859,7 +850,7 @@ export default function HomeRider({ navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ Periodic refresh for announcements + appointment notifications
+  //  Periodic refresh for announcements + appointment notifications
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -1384,7 +1375,10 @@ export default function HomeRider({ navigation }) {
                         style={styles.docsScroll}
                       >
                         {allReceipt.map((url, idx) => (
-                          <TouchableOpacity key={`all_r_${idx}`} onPress={() => Linking.openURL(url)}>
+                          <TouchableOpacity
+                            key={`all_r_${idx}`}
+                            onPress={() => openImageViewer(url, "Receipt Photo")}
+                          >
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           </TouchableOpacity>
                         ))}
@@ -1403,7 +1397,10 @@ export default function HomeRider({ navigation }) {
                         style={styles.docsScroll}
                       >
                         {allEbike.map((url, idx) => (
-                          <TouchableOpacity key={`all_e_${idx}`} onPress={() => Linking.openURL(url)}>
+                          <TouchableOpacity
+                            key={`all_e_${idx}`}
+                            onPress={() => openImageViewer(url, "E-Bike Photo")}
+                          >
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           </TouchableOpacity>
                         ))}
@@ -1426,7 +1423,7 @@ export default function HomeRider({ navigation }) {
                         <TouchableOpacity
                           key={d.id}
                           style={styles.docThumbContainer}
-                          onPress={() => d.url && Linking.openURL(d.url)}
+                          onPress={() => d.url && openImageViewer(d.url, "Rider Uploaded Document")}
                         >
                           {d.url ? (
                             <Image
@@ -1464,7 +1461,7 @@ export default function HomeRider({ navigation }) {
                         <TouchableOpacity
                           key={index.toString()}
                           style={styles.docThumbContainer}
-                          onPress={() => url && Linking.openURL(url)}
+                          onPress={() => url && openImageViewer(url, "Admin Verification")}
                         >
                           <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           <View style={styles.docTypeBadge}>
@@ -1527,7 +1524,7 @@ export default function HomeRider({ navigation }) {
                               {rec.map((url, i) => (
                                 <TouchableOpacity
                                   key={`r_${idx}_${i}`}
-                                  onPress={() => Linking.openURL(url)}
+                                  onPress={() => openImageViewer(url, "Receipt Photo")}
                                 >
                                   <Image source={{ uri: url }} style={styles.auditThumb} />
                                 </TouchableOpacity>
@@ -1543,7 +1540,7 @@ export default function HomeRider({ navigation }) {
                               {ebp.map((url, i) => (
                                 <TouchableOpacity
                                   key={`e_${idx}_${i}`}
-                                  onPress={() => Linking.openURL(url)}
+                                  onPress={() => openImageViewer(url, "E-Bike Photo")}
                                 >
                                   <Image source={{ uri: url }} style={styles.auditThumb} />
                                 </TouchableOpacity>
@@ -1557,7 +1554,7 @@ export default function HomeRider({ navigation }) {
                 )}
               </View>
 
-              {/* ✅ Add New E-bike button — pinaka baba */}
+              {/* Add New E-bike button */}
               <TouchableOpacity
                 style={styles.addNewEbikeBtn}
                 onPress={() => {
@@ -1591,7 +1588,7 @@ export default function HomeRider({ navigation }) {
             <Text style={[styles.modalTitle, { marginBottom: 10 }]}>Announcements & Updates</Text>
 
             <ScrollView contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
-              {/* ✅ System Updates */}
+              {/* System Updates */}
               <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>System Updates</Text>
               {systemNotifs.length === 0 ? (
                 <Text style={styles.emptyDocsText}>No system updates yet.</Text>
@@ -1605,7 +1602,7 @@ export default function HomeRider({ navigation }) {
                 ))
               )}
 
-              {/* ✅ Announcements */}
+              {/* Announcements */}
               <Text style={[styles.sectionTitle, { marginTop: 10, marginBottom: 8 }]}>Announcements</Text>
               {newsUpdates.length === 0 ? (
                 <Text style={styles.emptyDocsText}>No announcements yet.</Text>
@@ -1625,28 +1622,28 @@ export default function HomeRider({ navigation }) {
     );
   };
 
-  // ✅ Green Route Image Zoom Modal (boxed +/− buttons + pan)
-  const renderGreenRouteZoomModal = () => {
+  //  IN-APP Image Viewer Modal (Zoom + Pan)
+  const renderImageViewerModal = () => {
     const BASE_W = SCREEN_WIDTH;
     const BASE_H = SCREEN_HEIGHT * 0.72;
 
-    const scaledW = BASE_W * greenZoomScale;
-    const scaledH = BASE_H * greenZoomScale;
+    const scaledW = BASE_W * imgViewerScale;
+    const scaledH = BASE_H * imgViewerScale;
 
     return (
       <Modal
-        visible={greenZoomVisible}
+        visible={imgViewerVisible}
         transparent
         animationType="fade"
-        onRequestClose={closeGreenZoom}
+        onRequestClose={closeImageViewer}
       >
-        <View style={styles.zoomOverlay}>
-          <View style={styles.zoomCard}>
-            <TouchableOpacity style={styles.zoomCloseBtn} onPress={closeGreenZoom}>
-              <Text style={styles.zoomCloseText}>✕</Text>
+        <View style={styles.viewerOverlay}>
+          <View style={styles.viewerCard}>
+            <TouchableOpacity style={styles.viewerCloseBtn} onPress={closeImageViewer}>
+              <Text style={styles.viewerCloseText}>✕</Text>
             </TouchableOpacity>
 
-            <Text style={styles.zoomTitle}>Green Route Advisory</Text>
+            <Text style={styles.viewerTitle}>{imgViewerTitle || "Preview"}</Text>
 
             <View style={{ flex: 1, width: "100%", overflow: "hidden" }}>
               <ScrollView
@@ -1662,32 +1659,33 @@ export default function HomeRider({ navigation }) {
                   contentContainerStyle={{ paddingHorizontal: 14 }}
                 >
                   <View style={{ width: scaledW, height: scaledH }}>
-                    <Image
-                      source={GreenRouteAdvisory}
-                      style={{ width: "100%", height: "100%" }}
-                      resizeMode="contain"
-                    />
+                    {imgViewerUrl ? (
+                      <Image
+                        source={{ uri: imgViewerUrl }}
+                        style={{ width: "100%", height: "100%" }}
+                        resizeMode="contain"
+                      />
+                    ) : null}
                   </View>
                 </ScrollView>
               </ScrollView>
             </View>
 
-            {/* Box zoom controls */}
-            <View style={styles.zoomControlsRow}>
-              <Pressable style={styles.zoomCtrlBtn} onPress={zoomOut}>
-                <Text style={styles.zoomCtrlText}>−</Text>
+            <View style={styles.viewerControlsRow}>
+              <Pressable style={styles.viewerCtrlBtn} onPress={viewerZoomOut}>
+                <Text style={styles.viewerCtrlText}>−</Text>
               </Pressable>
 
-              <View style={styles.zoomScalePill}>
-                <Text style={styles.zoomScaleText}>{Math.round(greenZoomScale * 100)}%</Text>
+              <View style={styles.viewerScalePill}>
+                <Text style={styles.viewerScaleText}>{Math.round(imgViewerScale * 100)}%</Text>
               </View>
 
-              <Pressable style={styles.zoomCtrlBtn} onPress={zoomIn}>
-                <Text style={styles.zoomCtrlText}>+</Text>
+              <Pressable style={styles.viewerCtrlBtn} onPress={viewerZoomIn}>
+                <Text style={styles.viewerCtrlText}>+</Text>
               </Pressable>
             </View>
 
-            <Text style={styles.zoomHint}>Tip: Use + / − to zoom, then drag (scroll) to pan.</Text>
+            <Text style={styles.viewerHint}>Tip: Use + / − to zoom, then drag (scroll) to pan.</Text>
           </View>
         </View>
       </Modal>
@@ -1700,7 +1698,7 @@ export default function HomeRider({ navigation }) {
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>AIDE</Text>
 
-        {/* ✅ Bell with badge */}
+        {/* Bell with badge */}
         <Pressable onPress={openNotifications} style={styles.bellButton}>
           <Image source={BellIcon} style={styles.headerIcon} resizeMode="contain" />
           {unreadCount > 0 && (
@@ -1731,64 +1729,27 @@ export default function HomeRider({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* ✅ Carousel: Advisory Image + Map */}
+        {/*  Green Route Section — REMOVED PICTURE  (Map preview only) */}
         <View style={styles.mapPreviewContainer}>
           <View style={styles.mapPreviewHeader}>
             <Text style={styles.mapPreviewTitle}>Green Routes in Binan</Text>
           </View>
 
-          <View style={styles.carouselWrapper}>
-            <ScrollView
-              ref={carouselRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={onCarouselScrollEnd}
-              scrollEventThrottle={16}
-            >
-              {/* Slide 1: Advisory Image + BOX ZOOM BUTTON */}
-              <View style={styles.carouselSlide}>
-                <Pressable
-                  style={styles.carouselPressFill}
-                  onPress={() => navigation.navigate("GreenRouteMap")}
-                >
-                  <Image source={GreenRouteAdvisory} style={styles.mapImage} resizeMode="cover" />
-                </Pressable>
-
-                {/* ✅ Box button (Zoom) */}
-                <Pressable style={styles.zoomBoxBtn} onPress={openGreenZoom}>
-                  <Text style={styles.zoomBoxBtnText}>🔍</Text>
-                </Pressable>
-              </View>
-
-              {/* Slide 2: Embedded Map + floating button ONLY on slide 2 */}
-              <View style={styles.carouselSlide}>
-                <View style={{ flex: 1 }}>
-                  <WebView originWhitelist={["*"]} source={{ html: BINAN_MAPS_EMBED }} style={styles.webview} />
-
-                  {carouselIndex === 1 && (
-                    <TouchableOpacity
-                      style={styles.mapFloatingBtn}
-                      onPress={() => navigation.navigate("GreenRouteMap")}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.mapFloatingBtnText}>Open Full Map</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            </ScrollView>
-
-            {/* Dots */}
-            <View style={styles.dotsRow}>
-              <TouchableOpacity
-                style={[styles.dot, carouselIndex === 0 && styles.dotActive]}
-                onPress={() => goToSlide(0)}
+          <View style={styles.mapOnlyWrapper}>
+            <View style={{ flex: 1 }}>
+              <WebView
+                originWhitelist={["*"]}
+                source={{ html: BINAN_MAPS_EMBED }}
+                style={styles.webview}
               />
+
               <TouchableOpacity
-                style={[styles.dot, carouselIndex === 1 && styles.dotActive]}
-                onPress={() => goToSlide(1)}
-              />
+                style={styles.mapFloatingBtn}
+                onPress={() => navigation.navigate("GreenRouteMap")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.mapFloatingBtnText}>Open Full Map</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1826,7 +1787,7 @@ export default function HomeRider({ navigation }) {
       {renderEbikePickerModal()}
       {renderNotificationsModal()}
       {renderAddEbikeModal()}
-      {renderGreenRouteZoomModal()}
+      {renderImageViewerModal()}
     </SafeAreaView>
   );
 }
@@ -1848,7 +1809,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: "700", color: "#2E7D32" },
   headerIcon: { width: 24, height: 24, tintColor: "#2E7D32" },
 
-  // ✅ Bell + badge
+  //  Bell + badge
   bellButton: { position: "relative", padding: 4 },
   badge: {
     position: "absolute",
@@ -1898,31 +1859,11 @@ const styles = StyleSheet.create({
   mapPreviewTitle: { fontSize: 18, fontWeight: "700", color: "#2E7D32" },
 
   webview: { flex: 1 },
-  mapImage: { width: "100%", height: "100%" },
 
-  // ✅ Carousel styles
-  carouselWrapper: { width: "100%", height: 250 },
-  carouselSlide: { width: CAROUSEL_WIDTH, height: 250, position: "relative" },
-  carouselPressFill: { flex: 1 },
+  // ✅ Map-only wrapper (replaces carousel + picture)
+  mapOnlyWrapper: { width: "100%", height: 250 },
 
-  dotsRow: {
-    position: "absolute",
-    bottom: 10,
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center"
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    backgroundColor: "rgba(255,255,255,0.6)",
-    marginHorizontal: 5
-  },
-  dotActive: { backgroundColor: "rgba(255,255,255,1)" },
-
-  // ✅ Floating button for map slide (only appears on slide 2)
+  // ✅ Floating button for map preview
   mapFloatingBtn: {
     position: "absolute",
     top: 10,
@@ -1933,22 +1874,6 @@ const styles = StyleSheet.create({
     borderRadius: 999
   },
   mapFloatingBtnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 12 },
-
-  // ✅ BOX ZOOM button (Slide 1)
-  zoomBoxBtn: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderWidth: 1,
-    borderColor: "#2E7D32",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  zoomBoxBtnText: { fontSize: 16 },
 
   newsContainer: { paddingHorizontal: 20, marginVertical: 15 },
   newsSectionTitle: {
@@ -2207,14 +2132,14 @@ const styles = StyleSheet.create({
 
   btnDisabled: { opacity: 0.6 },
 
-  /* ✅ ZOOM MODAL STYLES */
-  zoomOverlay: {
+  /* IMAGE VIEWER MODAL STYLES */
+  viewerOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.75)",
     justifyContent: "center",
     alignItems: "center"
   },
-  zoomCard: {
+  viewerCard: {
     width: "94%",
     height: "86%",
     backgroundColor: "#111",
@@ -2223,7 +2148,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     overflow: "hidden"
   },
-  zoomCloseBtn: {
+  viewerCloseBtn: {
     position: "absolute",
     top: 10,
     right: 10,
@@ -2234,22 +2159,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  zoomCloseText: { fontSize: 16, fontWeight: "900", color: "#111" },
-  zoomTitle: {
+  viewerCloseText: { fontSize: 16, fontWeight: "900", color: "#111" },
+  viewerTitle: {
     color: "#FFF",
     fontSize: 16,
     fontWeight: "900",
     alignSelf: "center",
     marginBottom: 6
   },
-  zoomControlsRow: {
+  viewerControlsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     paddingVertical: 10
   },
-  zoomCtrlBtn: {
+  viewerCtrlBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
@@ -2259,8 +2184,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  zoomCtrlText: { fontSize: 20, fontWeight: "900", color: "#2E7D32" },
-  zoomScalePill: {
+  viewerCtrlText: { fontSize: 20, fontWeight: "900", color: "#2E7D32" },
+  viewerScalePill: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
@@ -2268,6 +2193,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)"
   },
-  zoomScaleText: { color: "#FFF", fontWeight: "900" },
-  zoomHint: { color: "rgba(255,255,255,0.75)", fontSize: 12, textAlign: "center", marginBottom: 10 }
+  viewerScaleText: { color: "#FFF", fontWeight: "900" },
+  viewerHint: { color: "rgba(255,255,255,0.75)", fontSize: 12, textAlign: "center", marginBottom: 10 }
 });

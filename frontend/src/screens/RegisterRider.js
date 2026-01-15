@@ -41,18 +41,18 @@ const MAX_GOV_ID_IMAGES = 3;
 function RegisterRider({ navigation }) {
   const [activeSection, setActiveSection] = useState("personal");
 
-  // ✅ Scroll ref (for auto-scroll to bottom when editing)
+  // Scroll ref (for auto-scroll to bottom when editing)
   const scrollRef = useRef(null);
 
-  // ✅ ebikes array (multiple registrations)
+  // ebikes array (multiple registrations)
   const [ebikes, setEbikes] = useState([]);
 
-  // ✅ NEW: Government Valid ID / Driver's License images (local URIs)
+  // Government Valid ID / Driver's License images (local URIs)
   const [govIdImages, setGovIdImages] = useState([]);
 
   const [form, setForm] = useState({
     firstName: "",
-    middleName: "", // ✅ Middle Name (Optional)
+    middleName: "", //  Middle Name (Optional)
     lastName: "",
     birthday: new Date(),
     contactNumber: "",
@@ -75,16 +75,16 @@ function RegisterRider({ navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ✅ plate checkbox is per CURRENT ebike entry
+  // plate checkbox is per CURRENT ebike entry
   const [noPlateNumber, setNoPlateNumber] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // ✅ editing mode for added ebike
+  // editing mode for added ebike
   const [editingEbikeId, setEditingEbikeId] = useState(null);
 
-  // ✅ NEW: errors state for red highlight
+  // errors state for red highlight
   const [errors, setErrors] = useState({});
 
   const clearError = (key) => {
@@ -109,7 +109,7 @@ function RegisterRider({ navigation }) {
 
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    clearError(key); // ✅ remove red highlight while typing
+    clearError(key); //  remove red highlight while typing
   };
 
   const toUpper = (v) => (v ?? "").toString().toUpperCase();
@@ -124,7 +124,7 @@ function RegisterRider({ navigation }) {
     }, 150);
   };
 
-  // ✅ CONFIRMATION before leaving (used in Personal section Back)
+  // CONFIRMATION before leaving (used in Personal section Back)
   const confirmExit = () => {
     if (loading) return;
 
@@ -142,7 +142,7 @@ function RegisterRider({ navigation }) {
     );
   };
 
-  // ✅ NEW: pick gov ID images
+  //  pick gov ID images
   const pickGovIdImages = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -175,7 +175,7 @@ function RegisterRider({ navigation }) {
           return merged.slice(0, MAX_GOV_ID_IMAGES);
         });
 
-        clearError("govId"); // ✅ clear error once user uploads
+        clearError("govId"); // clear error once user uploads
       }
     } catch (e) {
       console.error("pickGovIdImages error:", e);
@@ -187,7 +187,7 @@ function RegisterRider({ navigation }) {
     setGovIdImages((prev) => (prev || []).filter((x) => x !== uri));
   };
 
-  // ✅ NEW: upload gov ID images to Storage + return URLs
+  // upload gov ID images to Storage + return URLs
   const uploadGovIdImages = async (userId, imageUris) => {
     if (!imageUris || imageUris.length === 0) return [];
 
@@ -236,9 +236,69 @@ function RegisterRider({ navigation }) {
   // Validation Functions
   const validateEmail = (email) => {
     const normalized = (email || "").trim().toLowerCase();
-    // ✅ must be @gmail.com
-    const gmailRegex = /^[^\s@]+@gmail\.com$/;
-    return gmailRegex.test(normalized);
+    // UPDATED: accept ANY valid email (not Gmail-only)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    return emailRegex.test(normalized);
+  };
+
+  // Strong password validation (8+ chars + uppercase + lowercase + number + special + no spaces)
+  const validatePasswordStrong = (password, email) => {
+    const p = password || "";
+
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    const localPart = normalizedEmail.includes("@")
+      ? normalizedEmail.split("@")[0]
+      : "";
+
+    // small common list (optional)
+    const common = new Set([
+      "password",
+      "password123",
+      "12345678",
+      "qwerty123",
+      "admin123",
+      "iloveyou",
+    ]);
+
+    if (!p.trim()) return { ok: false, message: "Please fill in Password" };
+    if (p.length < 8)
+      return { ok: false, message: "Password must be at least 8 characters long" };
+    if (p.length > 64)
+      return { ok: false, message: "Password must be at most 64 characters long" };
+    if (/\s/.test(p))
+      return { ok: false, message: "Password must not contain spaces" };
+    if (!/[A-Z]/.test(p))
+      return { ok: false, message: "Add at least 1 uppercase letter (A-Z)" };
+    if (!/[a-z]/.test(p))
+      return { ok: false, message: "Add at least 1 lowercase letter (a-z)" };
+    if (!/[0-9]/.test(p))
+      return { ok: false, message: "Add at least 1 number (0-9)" };
+    if (!/[^A-Za-z0-9]/.test(p))
+      return {
+        ok: false,
+        message: "Add at least 1 special character (e.g., ! @ #)",
+      };
+
+    const plower = p.trim().toLowerCase();
+
+    if (normalizedEmail && plower === normalizedEmail) {
+      return { ok: false, message: "Password must not be the same as your email" };
+    }
+    if (localPart && plower === localPart) {
+      return {
+        ok: false,
+        message: "Password must not be the same as your email username",
+      };
+    }
+
+    if (common.has(plower)) {
+      return {
+        ok: false,
+        message: "Password is too common. Please choose a stronger one",
+      };
+    }
+
+    return { ok: true, message: "" };
   };
 
   const formatPhoneNumber = (value) => {
@@ -330,7 +390,7 @@ function RegisterRider({ navigation }) {
       messages.push("Please fill in Address");
     }
 
-    // ✅ NEW: Gov ID required
+    // Gov ID required
     if (!govIdImages || govIdImages.length === 0) {
       err.govId = true;
       messages.push("Please upload Government Valid ID / Driver’s License");
@@ -408,25 +468,27 @@ function RegisterRider({ navigation }) {
     return true;
   };
 
+  // UPDATED: Account validation using strong password rules
   const validateAccountInfo = () => {
     const sectionKeys = ["email", "password", "confirmPassword"];
     const err = {};
     const messages = [];
 
-    if (!form.email?.trim()) {
+    const emailVal = (form.email || "").trim();
+
+    if (!emailVal) {
       err.email = true;
       messages.push("Please fill in Email");
-    } else if (!validateEmail(form.email)) {
+    } else if (!validateEmail(emailVal)) {
       err.email = true;
-      messages.push("Email must be a valid Gmail address (e.g., name@gmail.com)");
+      // UPDATED message: not Gmail-only anymore
+      messages.push("Please enter a valid email address (e.g., name@yahoo.com)");
     }
 
-    if (!form.password?.trim()) {
+    const passCheck = validatePasswordStrong(form.password, form.email);
+    if (!passCheck.ok) {
       err.password = true;
-      messages.push("Please fill in Password");
-    } else if (form.password.length < 6) {
-      err.password = true;
-      messages.push("Password must be at least 6 characters long");
+      messages.push(passCheck.message);
     }
 
     if (!form.confirmPassword?.trim()) {
@@ -458,12 +520,16 @@ function RegisterRider({ navigation }) {
     setNoPlateNumber(false);
     setEditingEbikeId(null);
 
-    // ✅ clear ebike-related errors when reset
+    // clear ebike-related errors when reset
     setErrors((prev) => {
       const next = { ...prev };
-      ["ebikeBrand", "ebikeModel", "ebikeColor", "chassisMotorNumber", "plateNumber"].forEach(
-        (k) => delete next[k]
-      );
+      [
+        "ebikeBrand",
+        "ebikeModel",
+        "ebikeColor",
+        "chassisMotorNumber",
+        "plateNumber",
+      ].forEach((k) => delete next[k]);
       return next;
     });
   };
@@ -485,12 +551,16 @@ function RegisterRider({ navigation }) {
       plateNumber: hasPlate ? (item?.plateNumber || "") : "",
     }));
 
-    // ✅ clear errors when editing existing
+    //clear errors when editing existing
     setErrors((prev) => {
       const next = { ...prev };
-      ["ebikeBrand", "ebikeModel", "ebikeColor", "chassisMotorNumber", "plateNumber"].forEach(
-        (k) => delete next[k]
-      );
+      [
+        "ebikeBrand",
+        "ebikeModel",
+        "ebikeColor",
+        "chassisMotorNumber",
+        "plateNumber",
+      ].forEach((k) => delete next[k]);
       return next;
     });
 
@@ -718,10 +788,7 @@ function RegisterRider({ navigation }) {
           return;
         }
 
-        const legacyQ = query(
-          collection(db, "users"),
-          where("plateNumber", "==", p)
-        );
+        const legacyQ = query(collection(db, "users"), where("plateNumber", "==", p));
         const legacySnap = await getDocs(legacyQ);
         if (!legacySnap.empty) {
           Alert.alert("Error", `Plate number already registered: ${p}`);
@@ -730,7 +797,7 @@ function RegisterRider({ navigation }) {
         }
       }
 
-      // ✅ Create Auth user (this also signs in the user)
+      // Create Auth user (this also signs in the user)
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         normalizedEmail,
@@ -739,7 +806,7 @@ function RegisterRider({ navigation }) {
 
       const userId = userCredential.user.uid;
 
-      // ✅ Upload Gov ID first (required)
+      // Upload Gov ID first (required)
       const uploadedGovUrls = await uploadGovIdImages(userId, govIdImages);
 
       if (!uploadedGovUrls || uploadedGovUrls.length === 0) {
@@ -758,7 +825,7 @@ function RegisterRider({ navigation }) {
         return;
       }
 
-      // ✅ Save Gov ID URLs to riderRegistrations/{uid}/images (so RiderScreen can display)
+      // Save Gov ID URLs to riderRegistrations/{uid}/images (so RiderScreen can display)
       await setDoc(
         doc(db, "riderRegistrations", userId),
         {
@@ -773,7 +840,7 @@ function RegisterRider({ navigation }) {
       for (const url of uploadedGovUrls) {
         await addDoc(imgCol, {
           url,
-          type: "original", // ✅ RiderScreen reads type == original
+          type: "original", // RiderScreen reads type == original
           docType: "gov_id",
           createdAt: serverTimestamp(),
         });
@@ -782,7 +849,7 @@ function RegisterRider({ navigation }) {
       const firstPlate = plates[0] || "";
       const firstEbike = ebikesToSave[0] || null;
 
-      // ✅ Save user doc (include govIdUrls as fallback)
+      // Save user doc (include govIdUrls as fallback)
       await setDoc(doc(db, "users", userId), {
         uid: userId,
         firstName: (form.firstName || "").trim().toUpperCase(),
@@ -806,7 +873,7 @@ function RegisterRider({ navigation }) {
         ebikes: ebikesToSave,
         plateNumbers: plates,
 
-        // ✅ NEW: fallback copy (optional, for RiderScreen fallback)
+        // fallback copy (optional, for RiderScreen fallback)
         govIdUrls: uploadedGovUrls,
 
         createdAt: new Date().toISOString(),
@@ -828,7 +895,7 @@ function RegisterRider({ navigation }) {
           "This email is already registered. Please use a different email or log in.";
       } else if (error.code === "auth/weak-password") {
         errorMessage =
-          "Password is too weak. Please use a stronger password with at least 6 characters.";
+          "Password is too weak. Use 8+ characters with uppercase, lowercase, number, and special character.";
       } else if (error.code === "auth/invalid-email") {
         errorMessage = "Invalid email format. Please check your email address.";
       } else if (error.code === "auth/operation-not-allowed") {
@@ -915,9 +982,7 @@ function RegisterRider({ navigation }) {
             disabled={loading}
           >
             <Text style={styles.datePickerText}>
-              {form.birthday
-                ? form.birthday.toLocaleDateString()
-                : "Select birthday"}
+              {form.birthday ? form.birthday.toLocaleDateString() : "Select birthday"}
             </Text>
             <Text style={styles.datePickerIcon}>📅</Text>
           </TouchableOpacity>
@@ -996,7 +1061,7 @@ function RegisterRider({ navigation }) {
         </View>
       </View>
 
-      {/* ✅ NEW: Government Valid ID / Driver's License upload */}
+      {/*Government Valid ID / Driver's License upload */}
       <View style={styles.fieldContainer}>
         <Text style={styles.fieldLabel}>
           Government Valid ID / Driver&apos;s License
@@ -1060,16 +1125,13 @@ function RegisterRider({ navigation }) {
               </View>
 
               <Text style={styles.ebikeLine}>
-                <Text style={styles.ebikeLabel}>Brand:</Text>{" "}
-                {e.ebikeBrand || "-"}
+                <Text style={styles.ebikeLabel}>Brand:</Text> {e.ebikeBrand || "-"}
               </Text>
               <Text style={styles.ebikeLine}>
-                <Text style={styles.ebikeLabel}>Model:</Text>{" "}
-                {e.ebikeModel || "-"}
+                <Text style={styles.ebikeLabel}>Model:</Text> {e.ebikeModel || "-"}
               </Text>
               <Text style={styles.ebikeLine}>
-                <Text style={styles.ebikeLabel}>Color:</Text>{" "}
-                {e.ebikeColor || "-"}
+                <Text style={styles.ebikeLabel}>Color:</Text> {e.ebikeColor || "-"}
               </Text>
               <Text style={styles.ebikeLine}>
                 <Text style={styles.ebikeLabel}>Chassis/Motor:</Text>{" "}
@@ -1080,10 +1142,7 @@ function RegisterRider({ navigation }) {
               </Text>
 
               <View style={styles.cardActions}>
-                <TouchableOpacity
-                  onPress={() => startEditEbike(e)}
-                  disabled={loading}
-                >
+                <TouchableOpacity onPress={() => startEditEbike(e)} disabled={loading}>
                   <Text style={styles.editText}>Edit</Text>
                 </TouchableOpacity>
 
@@ -1108,12 +1167,7 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             E-Bike Brand<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View
-            style={[
-              styles.inputCard,
-              errors.ebikeBrand && styles.inputCardError,
-            ]}
-          >
+          <View style={[styles.inputCard, errors.ebikeBrand && styles.inputCardError]}>
             <TextInput
               style={styles.input}
               placeholder="Enter E-bike brand"
@@ -1130,12 +1184,7 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             Model Unit<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View
-            style={[
-              styles.inputCard,
-              errors.ebikeModel && styles.inputCardError,
-            ]}
-          >
+          <View style={[styles.inputCard, errors.ebikeModel && styles.inputCardError]}>
             <TextInput
               style={styles.input}
               placeholder="Enter model unit"
@@ -1152,12 +1201,7 @@ function RegisterRider({ navigation }) {
           <Text style={styles.fieldLabel}>
             E-Bike Color<Text style={styles.requiredStar}> *</Text>
           </Text>
-          <View
-            style={[
-              styles.inputCard,
-              errors.ebikeColor && styles.inputCardError,
-            ]}
-          >
+          <View style={[styles.inputCard, errors.ebikeColor && styles.inputCardError]}>
             <TextInput
               style={styles.input}
               placeholder="Enter E-bike color"
@@ -1280,7 +1324,7 @@ function RegisterRider({ navigation }) {
           <View style={[styles.inputCard, errors.email && styles.inputCardError]}>
             <TextInput
               style={styles.input}
-              placeholder="name@gmail.com"
+              placeholder="name@example.com"
               placeholderTextColor="#999"
               value={form.email}
               onChangeText={(v) => update("email", toLower(v))}
@@ -1289,7 +1333,9 @@ function RegisterRider({ navigation }) {
               editable={!loading}
             />
           </View>
-          <Text style={styles.helpText}>Gmail only: must end with @gmail.com</Text>
+          <Text style={styles.helpText}>
+            Enter a valid email (Gmail/Yahoo/Outlook/iCloud/etc.)
+          </Text>
         </View>
 
         <View style={styles.fieldContainer}>
@@ -1305,19 +1351,22 @@ function RegisterRider({ navigation }) {
           >
             <TextInput
               style={[styles.input, styles.passwordInput]}
-              placeholder="Minimum 6 characters"
+              placeholder="Minimum 8 characters"
               placeholderTextColor="#999"
               value={form.password}
               onChangeText={(v) => update("password", v)}
               secureTextEntry={!showPassword}
               editable={!loading}
             />
-            <TouchableOpacity
-              onPress={() => !loading && setShowPassword((prev) => !prev)}
-            >
+            <TouchableOpacity onPress={() => !loading && setShowPassword((prev) => !prev)}>
               <Text style={styles.toggleText}>{showPassword ? "Hide" : "Show"}</Text>
             </TouchableOpacity>
           </View>
+
+          {/*added help text for strong password rules */}
+          <Text style={styles.helpText}>
+            Must have 8+ characters, uppercase, lowercase, number, and special character. No spaces.
+          </Text>
         </View>
 
         <View style={styles.fieldContainer}>
@@ -1341,9 +1390,7 @@ function RegisterRider({ navigation }) {
               editable={!loading}
             />
             <TouchableOpacity
-              onPress={() =>
-                !loading && setShowConfirmPassword((prev) => !prev)
-              }
+              onPress={() => !loading && setShowConfirmPassword((prev) => !prev)}
             >
               <Text style={styles.toggleText}>
                 {showConfirmPassword ? "Hide" : "Show"}
@@ -1366,7 +1413,7 @@ function RegisterRider({ navigation }) {
           <Text style={styles.greenHeaderText}>AIDE</Text>
         </View>
 
-        {/* ✅ HEADER UPDATED: centered title, removed back button */}
+        {/*HEADER UPDATED: centered title, removed back button */}
         <View style={styles.headerContainer}>
           <Text style={styles.headerTitle}>Create an Account</Text>
         </View>
@@ -1378,9 +1425,7 @@ function RegisterRider({ navigation }) {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            {activeSection === "personal"
-              ? renderPersonalSection()
-              : renderEbikeSection()}
+            {activeSection === "personal" ? renderPersonalSection() : renderEbikeSection()}
 
             <View style={styles.navigationButtons}>
               <TouchableOpacity
@@ -1413,11 +1458,7 @@ function RegisterRider({ navigation }) {
                 disabled={loading}
               >
                 <Text style={styles.nextButtonText}>
-                  {loading
-                    ? "Loading..."
-                    : activeSection === "personal"
-                    ? "Next"
-                    : "Submit"}
+                  {loading ? "Loading..." : activeSection === "personal" ? "Next" : "Submit"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1494,7 +1535,7 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
 
-  // ✅ NEW: red highlight style
+  // red highlight style
   inputCardError: {
     borderWidth: 1,
     borderColor: "#F44336",
@@ -1636,7 +1677,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // ✅ NEW: Gov ID upload styles
+  // Gov ID upload styles
   uploadBtn: {
     backgroundColor: "#E6F3EC",
     borderRadius: 10,

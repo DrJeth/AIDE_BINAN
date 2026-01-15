@@ -29,7 +29,7 @@ export default function AppointmentScreen({ navigation }) {
     firstName: "",
     lastName: "",
     plateNumber: "Not Set", // primary plate (for saving appointment)
-    plateNumbers: [], // ✅ ALL plates for display
+    plateNumbers: [], //  ALL plates for display
     email: ""
   });
 
@@ -43,7 +43,7 @@ export default function AppointmentScreen({ navigation }) {
   const auth = getAuth();
   const db = getFirestore();
 
-  // ✅ Collect ALL plates from: plateNumbers[] -> ebikes[] -> plateNumber
+  // Collect ALL plates from: plateNumbers[] -> ebikes[] -> plateNumber
   const getAllPlateNumbers = (ud = {}) => {
     const plates = [];
 
@@ -73,20 +73,20 @@ export default function AppointmentScreen({ navigation }) {
     return cleaned;
   };
 
-  // =========================
-  // ✅ GLOBAL SLOT VALIDATION (30 minutes gap)
-  // =========================
-  const MIN_GAP_MINUTES = 30; // diff <= 30 mins = conflict (10:30 still NOT allowed; 10:31 allowed)
+  // TIME RULES (30-min picker + SAME HOUR restriction)
+  const TIME_SLOT_INTERVAL_MINUTES = 30; // ✅ 00 / 30 only
 
   const sameDayLocal = (a, b) =>
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate();
 
+  //  GENERAL RULE: bawal same hour (kahit anong oras)
+  const sameHourLocal = (a, b) =>
+    sameDayLocal(a, b) && a.getHours() === b.getHours();
+
   const fmtTime = (d) =>
     d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  const minutesDiff = (a, b) => Math.abs(a.getTime() - b.getTime()) / 60000;
 
   const isWithinOfficeHours = (dt) => {
     const totalMinutes = dt.getHours() * 60 + dt.getMinutes();
@@ -100,21 +100,56 @@ export default function AppointmentScreen({ navigation }) {
     return day !== 0 && day !== 6;
   };
 
+  //  force selected time to 00/30 (Android may ignore minuteInterval)
+  const snapTo30 = (time) => {
+    const t = new Date(time);
+    t.setSeconds(0);
+    t.setMilliseconds(0);
+
+    const m = t.getMinutes();
+    const remainder = m % TIME_SLOT_INTERVAL_MINUTES;
+
+    // snap to nearest 30 mins
+    let snapped = m - remainder;
+    if (remainder >= TIME_SLOT_INTERVAL_MINUTES / 2) snapped += TIME_SLOT_INTERVAL_MINUTES;
+
+    if (snapped === 60) {
+      t.setHours(t.getHours() + 1);
+      t.setMinutes(0);
+    } else {
+      t.setMinutes(snapped);
+    }
+    return t;
+  };
+
+  //  align to next 30-min slot (for suggestions)
+  const alignToNext30 = (dt) => {
+    const d = new Date(dt);
+    d.setSeconds(0);
+    d.setMilliseconds(0);
+
+    const m = d.getMinutes();
+    const remainder = m % TIME_SLOT_INTERVAL_MINUTES;
+    if (remainder !== 0) d.setMinutes(m + (TIME_SLOT_INTERVAL_MINUTES - remainder));
+    return d;
+  };
+
   const isSlotFree = (candidateDT, busyDTs) => {
-    // ✅ conflict if diff <= 30 minutes
-    return busyDTs.every((busy) => minutesDiff(candidateDT, busy) > MIN_GAP_MINUTES);
+    // free only if no one booked within the SAME HOUR
+    return busyDTs.every((busy) => !sameHourLocal(candidateDT, busy));
   };
 
   const findNextVacantTimes = (baseDT, busyDTs, maxSuggestions = 5) => {
     const suggestions = [];
-    const candidate = new Date(baseDT);
-    candidate.setSeconds(0);
-    candidate.setMilliseconds(0);
 
-    // scan forward by minute (up to 600 mins ~ 10 hrs)
-    for (let i = 0; i < 600 && suggestions.length < maxSuggestions; i++) {
-      candidate.setMinutes(candidate.getMinutes() + 1);
+    const start = alignToNext30(baseDT);
+    const candidate = new Date(start);
 
+    // scan forward by 30 mins (stop if day changes)
+    for (let i = 0; i < 50 && suggestions.length < maxSuggestions; i++) {
+      candidate.setMinutes(candidate.getMinutes() + TIME_SLOT_INTERVAL_MINUTES);
+
+      if (!sameDayLocal(candidate, baseDT)) break;
       if (!isWeekday(candidate)) continue;
       if (!isWithinOfficeHours(candidate)) continue;
 
@@ -229,18 +264,21 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
+      //  lock time to 00/30 before saving
+      const snappedTime = snapTo30(selectedTime);
+
       // Combine date and time (LOCAL)
       const appointmentDateTime = new Date(
         selectedDate.getFullYear(),
         selectedDate.getMonth(),
         selectedDate.getDate(),
-        selectedTime.getHours(),
-        selectedTime.getMinutes(),
+        snappedTime.getHours(),
+        snappedTime.getMinutes(),
         0,
         0
       );
 
-      // ✅ Validate day: Monday–Friday only
+      // Validate day: Monday–Friday only
       if (!isWeekday(appointmentDateTime)) {
         Alert.alert(
           "Unavailable Day",
@@ -249,7 +287,7 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
-      // ✅ Validate time: 8:00 AM – 5:00 PM only
+      //  Validate time: 8:00 AM – 5:00 PM only
       if (!isWithinOfficeHours(appointmentDateTime)) {
         Alert.alert(
           "Unavailable Time",
@@ -258,31 +296,25 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
-      // ✅ Validate: must be future time
+      // Validate: must be future time
       const now = new Date();
       if (appointmentDateTime.getTime() <= now.getTime()) {
         Alert.alert("Invalid Time", "Please select a future time.");
         return;
       }
 
-      // Check for existing pending appointments (same user)
-      const appointmentsQuery = query(
+      // CHECK EXISTING PENDING (but DON'T delete yet)
+      // We will auto-cancel only AFTER the new slot passes conflict checks.
+      const existingPendingQuery = query(
         collection(db, "appointments"),
         where("uid", "==", auth.currentUser.uid),
         where("status", "==", "Pending")
       );
-      const existingAppointments = await getDocs(appointmentsQuery);
+      const existingPendingSnap = await getDocs(existingPendingQuery);
+      const existingPendingIds = existingPendingSnap.docs.map((d) => d.id);
+      const hadExistingPending = existingPendingIds.length > 0;
 
-      if (!existingAppointments.empty) {
-        Alert.alert(
-          "Existing Appointment",
-          "You already have a pending appointment. Please cancel the existing one first."
-        );
-        return;
-      }
-
-      // ✅ GLOBAL CONFLICT CHECK (same day, all riders)
-      // Range: start of selected day to start of next day
+      // GLOBAL CONFLICT CHECK (same day, all riders)
       const dayStartLocal = new Date(
         selectedDate.getFullYear(),
         selectedDate.getMonth(),
@@ -312,27 +344,30 @@ export default function AppointmentScreen({ navigation }) {
       const daySnap = await getDocs(dayQuery);
 
       // busy = Pending + Approved only (ignore Rejected)
+      // IMPORTANT: ignore own Pending appointment(s) because we are replacing them
       const busyDTs = daySnap.docs
-        .map((d) => d.data())
+        .map((d) => ({ id: d.id, ...d.data() }))
         .filter(
           (a) =>
             a?.appointmentDate &&
             (a.status === "Pending" || a.status === "Approved")
         )
+        .filter(
+          (a) =>
+            !(
+              a.uid === auth.currentUser.uid &&
+              a.status === "Pending"
+            )
+        )
         .map((a) => new Date(a.appointmentDate));
 
-      // conflict if any busy within 30 minutes (<= 30)
-      const conflictDT = busyDTs.find(
-        (busy) => minutesDiff(appointmentDateTime, busy) <= MIN_GAP_MINUTES
+      // NEW RULE: conflict if SAME HOUR is already taken (kahit anong oras)
+      const conflictDT = busyDTs.find((busy) =>
+        sameHourLocal(appointmentDateTime, busy)
       );
 
       if (conflictDT) {
-        const startScan =
-          sameDayLocal(appointmentDateTime, now) && appointmentDateTime < now
-            ? now
-            : appointmentDateTime;
-
-        const suggestions = findNextVacantTimes(startScan, busyDTs, 5);
+        const suggestions = findNextVacantTimes(appointmentDateTime, busyDTs, 5);
 
         const suggestionText =
           suggestions.length > 0
@@ -341,48 +376,78 @@ export default function AppointmentScreen({ navigation }) {
 
         Alert.alert(
           "Time Not Available",
-          `Someone has already booked a slot within 30 minutes of your selected time.\n\nNearest booked time: ${fmtTime(
-          conflictDT
-          )}\n\nSuggested available times:\n${suggestionText}`
+          `This hour is already booked.\n\nBooked time in that hour: ${fmtTime(
+            conflictDT
+          )}\n\nSuggested available times (30-min slots):\n${suggestionText}`
         );
         return;
       }
 
-      // ✅ Use primary plate (first from plateNumbers) if exists
+      // AUTO-CANCEL OLD PENDING NOW (safe: new slot already valid & free)
+      if (hadExistingPending) {
+        try {
+          await Promise.all(
+            existingPendingIds.map((id) =>
+              deleteDoc(doc(db, "appointments", id))
+            )
+          );
+
+          // remove from UI list too
+          const idsSet = new Set(existingPendingIds);
+          setPendingAppointments((prev) => prev.filter((appt) => !idsSet.has(appt.id)));
+        } catch (e) {
+          console.error("Auto-cancel failed:", e);
+          Alert.alert(
+            "Error",
+            "Failed to auto-cancel your existing appointment. Please try again."
+          );
+          return;
+        }
+      }
+
+      // Use primary plate (first from plateNumbers) if exists
       const primaryPlate =
         (Array.isArray(userData.plateNumbers) && userData.plateNumbers.length > 0
           ? userData.plateNumbers[0]
           : userData.plateNumber) || "Not Set";
 
       // Add appointment to Firestore
+      const createdAtISO = new Date().toISOString();
+      const appointmentISO = appointmentDateTime.toISOString();
+
       const newAppointmentRef = await addDoc(collection(db, "appointments"), {
         uid: auth.currentUser.uid,
         firstName: userData.firstName,
         lastName: userData.lastName,
-        plateNumber: primaryPlate, // saved plate
-        appointmentDate: appointmentDateTime.toISOString(),
+        plateNumber: primaryPlate,
+        appointmentDate: appointmentISO,
         status: "Pending",
-        createdAt: new Date().toISOString()
+        createdAt: createdAtISO
       });
 
-      // Refresh list
-      setPendingAppointments([
+      // Refresh list (functional update to avoid state issues)
+      setPendingAppointments((prev) => [
         {
           id: newAppointmentRef.id,
           uid: auth.currentUser.uid,
           firstName: userData.firstName,
           lastName: userData.lastName,
           plateNumber: primaryPlate,
-          appointmentDate: appointmentDateTime.toISOString(),
+          appointmentDate: appointmentISO,
           status: "Pending",
-          createdAt: new Date().toISOString()
+          createdAt: createdAtISO
         },
-        ...pendingAppointments
+        ...prev
       ]);
+
+      // keep UI snapped
+      setSelectedTime(snappedTime);
 
       Alert.alert(
         "Appointment Scheduled",
-        "Your appointment for E-Bike Registration has been scheduled successfully."
+        hadExistingPending
+          ? "Your old pending appointment was automatically canceled and replaced with the new schedule."
+          : "Your appointment for E-Bike Registration has been scheduled successfully."
       );
     } catch (error) {
       console.error("Appointment scheduling error:", error);
@@ -564,25 +629,22 @@ export default function AppointmentScreen({ navigation }) {
                 </Text>
               </TouchableOpacity>
 
-              {/* ✅ UPDATED: force spinner (no analog clock) */}
+              {/* 30-min slots */}
               {showTimePicker && (
                 <DateTimePicker
                   value={selectedTime}
                   mode="time"
                   is24Hour={false}
                   display="spinner"
-                  minuteInterval={1}
+                  minuteInterval={30} // iOS supports; Android may ignore (snapTo30 will fix)
                   onChange={(event, time) => {
                     setShowTimePicker(Platform.OS === "ios");
 
-                    // Android dismiss handling
                     if (Platform.OS === "android" && event?.type === "dismissed")
                       return;
 
                     if (time) {
-                      const cleanTime = new Date(time);
-                      cleanTime.setSeconds(0);
-                      cleanTime.setMilliseconds(0);
+                      const cleanTime = snapTo30(time);
                       setSelectedTime(cleanTime);
                     }
                   }}
@@ -608,7 +670,9 @@ export default function AppointmentScreen({ navigation }) {
         data={pendingAppointments}
         renderItem={renderPendingAppointment}
         keyExtractor={(item) => item.id}
-        ListEmptyComponent={<Text style={styles.noAppointmentsText}>No appointments</Text>}
+        ListEmptyComponent={
+          <Text style={styles.noAppointmentsText}>No appointments</Text>
+        }
         contentContainerStyle={styles.content}
       />
     </SafeAreaView>
@@ -618,7 +682,7 @@ export default function AppointmentScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "white" },
 
-  /* ✅ HEADER FIX */
+  /* HEADER FIX */
   header: {
     backgroundColor: "#2e7d32",
     paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 0) : 0

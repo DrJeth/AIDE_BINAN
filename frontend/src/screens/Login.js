@@ -53,7 +53,7 @@ const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// ✅ Admin task role helpers
+// Admin task role helpers
 const ADMIN_TASK_ROLES = ["processing", "validator", "inspector"];
 
 const POSITION_TO_TASK_ROLE = {
@@ -71,7 +71,7 @@ const getAdminTaskRole = (userData = {}) => {
   return POSITION_TO_TASK_ROLE[pos] || "processing";
 };
 
-// ✅ friendly firebase auth messages (no raw firebase message shown)
+// friendly firebase auth messages (no raw firebase message shown)
 const getFriendlyAuthMessage = (code = "") => {
   const map = {
     "auth/invalid-email": "Please enter a valid email address.",
@@ -108,7 +108,7 @@ export default function Login({ navigation }) {
   // Admin task role
   const [tempAdminTaskRole, setTempAdminTaskRole] = useState("");
 
-  // 2FA states (ALWAYS ON)
+  // 2FA states (OPTIONAL - controlled by userData.twoFAEnabled)
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [twoFACode, setTwoFACode] = useState("");
   const [isVerifying2FA, setIsVerifying2FA] = useState(false);
@@ -209,7 +209,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // ✅ Send 2FA login code via PHP backend (ALWAYS ON)
+  // ✅ Send 2FA login code via PHP backend (OPTIONAL)
   const sendTwoFACodeToEmail = async (userEmail, userDocId) => {
     try {
       const code = generateVerificationCode();
@@ -294,15 +294,30 @@ export default function Login({ navigation }) {
         const computedTaskRole = tempUserRole === "Admin" ? getAdminTaskRole(userData) : "";
         if (computedTaskRole && computedTaskRole !== tempAdminTaskRole) {
           setTempAdminTaskRole(computedTaskRole);
-          await setDoc(doc(db, "users", tempUserDocId), { adminTaskRole: computedTaskRole }, { merge: true });
+          await setDoc(
+            doc(db, "users", tempUserDocId),
+            { adminTaskRole: computedTaskRole },
+            { merge: true }
+          );
         }
 
-        // ✅ ALWAYS ON 2FA after email verification
-        const sent = await sendTwoFACodeToEmail(tempUserEmail, tempUserDocId);
-        if (sent) {
-          setTwoFAResendCountdown(60);
-          setShow2FAModal(true);
+        // OPTIONAL 2FA after email verification (only if enabled)
+        const is2FAEnabled = userData.twoFAEnabled === true;
+
+        if (is2FAEnabled) {
+          const sent = await sendTwoFACodeToEmail(tempUserEmail, tempUserDocId);
+          if (sent) {
+            setTwoFAResendCountdown(60);
+            setShow2FAModal(true);
+          }
+          return;
         }
+
+        // If 2FA is OFF, proceed directly
+        Alert.alert("Success", "Email verified!");
+        setTimeout(() => {
+          navigateByRoleAndTask(tempUserRole, computedTaskRole || tempAdminTaskRole);
+        }, 400);
         return;
       } else {
         Alert.alert("Invalid Code", "The verification code you entered is incorrect.");
@@ -320,7 +335,7 @@ export default function Login({ navigation }) {
     if (success) setResendCountdown(60);
   };
 
-  // Verify 2FA code (ALWAYS REQUIRED)
+  // Verify 2FA code (ONLY IF enabled)
   const handleVerify2FA = async () => {
     if (!twoFACode.trim()) {
       Alert.alert("Error", "Please enter your login code");
@@ -351,7 +366,7 @@ export default function Login({ navigation }) {
       const userData = snap.data();
 
       if ((userData.twoFACode || "") === twoFACode) {
-        // ✅ clear used code (safer)
+        // clear used code (safer)
         await updateDoc(userRef, {
           twoFACode: deleteField(),
           twoFACodeSentAt: deleteField()
@@ -364,7 +379,11 @@ export default function Login({ navigation }) {
         const computedTaskRole = tempUserRole === "Admin" ? getAdminTaskRole(userData) : "";
         if (computedTaskRole && computedTaskRole !== tempAdminTaskRole) {
           setTempAdminTaskRole(computedTaskRole);
-          await setDoc(doc(db, "users", tempUserDocId), { adminTaskRole: computedTaskRole }, { merge: true });
+          await setDoc(
+            doc(db, "users", tempUserDocId),
+            { adminTaskRole: computedTaskRole },
+            { merge: true }
+          );
         }
 
         Alert.alert("Success", "Login successful!");
@@ -381,7 +400,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // ✅ REAL resend for 2FA (ALWAYS ON)
+  // ✅ REAL resend for 2FA (ONLY IF enabled)
   const handleResend2FA = async () => {
     if (isVerifying2FA) return;
     if (twoFAResendCountdown > 0) return;
@@ -495,7 +514,7 @@ export default function Login({ navigation }) {
       setTempUserDocId(userDocId);
       setTempAdminTaskRole(detectedAdminTaskRole);
 
-      // ✅ If email verification enabled -> email verify first
+      // If email verification enabled -> email verify first
       if (userData.emailVerificationEnabled === true) {
         const codeSent = await sendEmailVerificationCode(trimmedEmail, userDocId);
         if (codeSent) {
@@ -505,12 +524,23 @@ export default function Login({ navigation }) {
         return;
       }
 
-      // ✅ ALWAYS ON 2FA (both Rider & Admin)
-      const sent = await sendTwoFACodeToEmail(trimmedEmail, userDocId);
-      if (sent) {
-        setTwoFAResendCountdown(60);
-        setShow2FAModal(true);
+      // OPTIONAL 2FA (only if enabled)
+      const is2FAEnabled = userData.twoFAEnabled === true;
+
+      if (is2FAEnabled) {
+        const sent = await sendTwoFACodeToEmail(trimmedEmail, userDocId);
+        if (sent) {
+          setTwoFAResendCountdown(60);
+          setShow2FAModal(true);
+        }
+        return;
       }
+
+      // If 2FA is OFF, proceed directly
+      Alert.alert("Success", "Login successful!");
+      setTimeout(() => {
+        navigateByRoleAndTask(detectedRole, detectedAdminTaskRole);
+      }, 400);
       return;
     } catch (error) {
       const friendly = getFriendlyAuthMessage(error?.code);
@@ -619,7 +649,10 @@ export default function Login({ navigation }) {
 
               <View style={styles.signupRow}>
                 <Text style={styles.bottomText}>Don't have an account?</Text>
-                <TouchableOpacity onPress={() => navigation.navigate("RegisterRider")} disabled={isLoading}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("RegisterRider")}
+                  disabled={isLoading}
+                >
                   <Text style={styles.signUpText}> Sign Up</Text>
                 </TouchableOpacity>
               </View>
@@ -662,7 +695,10 @@ export default function Login({ navigation }) {
             />
 
             <TouchableOpacity
-              style={[styles.verificationButton, isVerifyingEmail && styles.verificationButtonDisabled]}
+              style={[
+                styles.verificationButton,
+                isVerifyingEmail && styles.verificationButtonDisabled
+              ]}
               onPress={handleVerifyEmailCode}
               disabled={isVerifyingEmail}
             >
@@ -703,7 +739,7 @@ export default function Login({ navigation }) {
         </View>
       </Modal>
 
-      {/* 2FA VERIFICATION MODAL (ALWAYS ON) */}
+      {/* 2FA VERIFICATION MODAL (OPTIONAL) */}
       <Modal
         animationType="fade"
         transparent
@@ -749,12 +785,17 @@ export default function Login({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.resendButton, twoFAResendCountdown > 0 && styles.resendButtonDisabled]}
+              style={[
+                styles.resendButton,
+                twoFAResendCountdown > 0 && styles.resendButtonDisabled
+              ]}
               onPress={handleResend2FA}
               disabled={isVerifying2FA || twoFAResendCountdown > 0}
             >
               <Text style={styles.resendText}>
-                {twoFAResendCountdown > 0 ? `Resend in ${twoFAResendCountdown}s` : "Didn't receive? Resend"}
+                {twoFAResendCountdown > 0
+                  ? `Resend in ${twoFAResendCountdown}s`
+                  : "Didn't receive? Resend"}
               </Text>
             </TouchableOpacity>
 
@@ -951,5 +992,3 @@ const styles = StyleSheet.create({
   cancelButton: { width: "100%", paddingVertical: 12, alignItems: "center" },
   cancelText: { color: "#666", fontSize: 14, fontWeight: "600" }
 });
-
-

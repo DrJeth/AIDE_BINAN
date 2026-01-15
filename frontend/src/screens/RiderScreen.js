@@ -1,4 +1,3 @@
-// RiderScreen.js
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -64,12 +63,12 @@ const STATUS = {
   REJECTED: 'Rejected',
 };
 
-const INSPECT_TAB = 'Inspect'; // ✅ Inspector-only tab label
+const INSPECT_TAB = 'Inspect'; // Inspector-only tab label
 
 const TABS_BY_ROLE = {
   processing: [STATUS.PENDING, STATUS.RETURNED, STATUS.VERIFIED, STATUS.REJECTED],
   validator: [STATUS.FOR_VALIDATION, STATUS.FOR_INSPECTION, STATUS.VERIFIED, STATUS.REJECTED],
-  inspector: [INSPECT_TAB], // ✅ Inspector sees "Inspect" list only
+  inspector: [INSPECT_TAB], // Inspector sees "Inspect" list only
 };
 
 const toJSDate = (v) => {
@@ -90,7 +89,16 @@ const toISODate = (v) => {
   return d.toISOString().split('T')[0];
 };
 
-// ✅ NEW: add years to YYYY-MM-DD safely (UTC-based to avoid TZ shifting)
+// get today's date in YYYY-MM-DD using LOCAL time (safe for Manila timezone)
+const getTodayISO = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+// add years to YYYY-MM-DD safely (UTC-based to avoid TZ shifting)
 const addYearsISO = (isoDate, years = 1) => {
   if (!isoDate) return '';
   const parts = String(isoDate).split('-').map(n => parseInt(n, 10));
@@ -105,7 +113,7 @@ const addYearsISO = (isoDate, years = 1) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-// ✅ NEW: inspector list should only show those still needing inspection
+// inspector list should only show those still needing inspection
 const getInspectionResultUpper = (ebike) =>
   (ebike?.inspectionResult || ebike?.inspection?.result || '')
     .toString()
@@ -129,32 +137,56 @@ const CHECKLIST_ITEMS = [
   // Safety / condition
   { key: 'side_mirror', label: 'Side Mirror', group: 'Safety & Condition', required: true },
   { key: 'tire_condition', label: 'Tire (Good Condition)', group: 'Safety & Condition', required: true },
-  { key: 'shock_absorber', label: 'Shock Absorber (Good Condition)', group: 'Safety & Condition', required: false },
+
+  // REQUIRED to answer (OK/NOT OK/N/A) — NOT OK will FAIL (unless exempt)
+  { key: 'shock_absorber', label: 'Shock Absorber (Good Condition)', group: 'Safety & Condition', required: true },
   { key: 'motor_condition', label: 'Motor (Good Condition)', group: 'Safety & Condition', required: true },
-  { key: 'wheel_bearings', label: 'Wheel Bearings', group: 'Safety & Condition', required: false },
+  { key: 'wheel_bearings', label: 'Wheel Bearings', group: 'Safety & Condition', required: true },
   { key: 'seats', label: 'Seats (Driver and Passenger)', group: 'Safety & Condition', required: true },
 
-  // Optional / not always applicable for 2-wheel e-bikes
-  { key: 'trash_can', label: 'Trash Can', group: 'Optional / If Applicable', required: false },
-  { key: 'window_wiper', label: 'Window Wiper', group: 'Optional / If Applicable', required: false },
+  // REQUIRED to answer, but NOT OK is allowed to PASS (advisory only)
+  { key: 'trash_can', label: 'Trash Can', group: 'Optional / If Applicable', required: true },
+  { key: 'window_wiper', label: 'Window Wiper', group: 'Optional / If Applicable', required: true },
 ];
+
+// Inspector rules
+const CHECKLIST_ALLOWED_VALUES = ['OK', 'FAIL', 'NA'];
+
+// These can be NOT OK but still allow PASSED (advisory only)
+const PASS_FAIL_EXEMPT_FAIL_KEYS = new Set(['trash_can', 'window_wiper']);
+
+// normalize incoming checklist values (supports old saved formats)
+const normalizeChecklistValue = (v) => {
+  const s = (v ?? '').toString().trim().toUpperCase();
+  if (!s) return '';
+  if (s === 'OK' || s === 'PASS' || s === 'PASSED') return 'OK';
+  if (s === 'NA' || s === 'N/A' || s === 'NOT APPLICABLE') return 'NA';
+  if (s === 'FAIL' || s === 'FAILED' || s === 'NOT OK' || s === 'NOTOK') return 'FAIL';
+  return s;
+};
 
 const normalizeChecklistDefaults = (incoming = {}) => {
   const out = { ...(incoming || {}) };
+
   CHECKLIST_ITEMS.forEach((it) => {
-    // default optional items to "NA" to solve 2-wheel compatibility (like window wiper)
-    if (!out[it.key]) out[it.key] = it.required ? '' : 'NA';
+    const hasKey = Object.prototype.hasOwnProperty.call(out, it.key);
+    const v = hasKey ? out[it.key] : undefined;
+
+    // No auto-answer. Force blank unless already saved.
+    if (!hasKey || v === null || v === undefined) out[it.key] = '';
+    out[it.key] = normalizeChecklistValue(out[it.key]);
   });
+
   return out;
 };
 
 const getTabStatusFilter = (tab) => {
-  // ✅ map "Inspect" tab to actual status filter
+  // map "Inspect" tab to actual status filter
   return tab === INSPECT_TAB ? STATUS.FOR_INSPECTION : tab;
 };
 
 /* =========================
-   ✅ FIX #1: GOV ID URL RESOLVER
+   FIX #1: GOV ID URL RESOLVER
    - supports url/downloadURL/imageUrl/uri/urls/storagePath/gs://
    - does NOT rely on type == "original"
 ========================= */
@@ -267,11 +299,11 @@ const RiderScreen = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-  // ✅ saved (existing) docs that can be removed by processing on Pending/Returned
+  // saved (existing) docs that can be removed by processing on Pending/Returned
   const [savedReceiptUrls, setSavedReceiptUrls] = useState([]);
   const [savedEbikeUrls, setSavedEbikeUrls] = useState([]);
 
-  // ✅ new picked images (not yet uploaded)
+  // new picked images (not yet uploaded)
   const [receiptImages, setReceiptImages] = useState([]);
   const [ebikePhotoImages, setEbikePhotoImages] = useState([]);
 
@@ -293,12 +325,50 @@ const RiderScreen = ({ navigation, route }) => {
 
   const [validatorNotes, setValidatorNotes] = useState('');
 
-  // ✅ INSPECTOR states
+  // INSPECTOR states
   const [inspectionChecklist, setInspectionChecklist] = useState(normalizeChecklistDefaults({}));
   const [inspectionNotes, setInspectionNotes] = useState('');
 
   const DEFAULT_SIDE_W = 90 * RESPONSIVE.width;
   const [headerLeftW, setHeaderLeftW] = useState(DEFAULT_SIDE_W);
+
+  // Image viewer (in-app) + delete loading
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [imageViewerUrl, setImageViewerUrl] = useState(null);
+  const [deletingRecord, setDeletingRecord] = useState(false);
+
+  const openImageViewer = (url) => {
+    const u = (url || '').toString().trim();
+    if (!u) return;
+    setImageViewerUrl(u);
+    setImageViewerVisible(true);
+  };
+
+  const renderImageViewerModal = () => (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={imageViewerVisible}
+      onRequestClose={() => setImageViewerVisible(false)}
+    >
+      <View style={styles.imageViewerOverlay}>
+        <TouchableOpacity
+          style={styles.imageViewerClose}
+          onPress={() => setImageViewerVisible(false)}
+        >
+          <Feather name="x" size={26} color="#fff" />
+        </TouchableOpacity>
+
+        {!!imageViewerUrl && (
+          <Image
+            source={{ uri: imageViewerUrl }}
+            style={styles.imageViewerImage}
+            resizeMode="contain"
+          />
+        )}
+      </View>
+    </Modal>
+  );
 
   const allowedTabs = useMemo(() => {
     const role = adminRole || 'processing';
@@ -379,7 +449,7 @@ const RiderScreen = ({ navigation, route }) => {
     (adminRole || 'processing') === 'inspector' &&
     activeTab === INSPECT_TAB;
 
-  // ✅ NEW: Auto renewal date = Registered + 1 year (processing only)
+  // Auto renewal date = Registered + 1 year (processing only)
   useEffect(() => {
     if (!canEditAsProcessing) return;
 
@@ -393,6 +463,29 @@ const RiderScreen = ({ navigation, route }) => {
       setRenewalDateInput(auto);
     }
   }, [registeredDateInput, canEditAsProcessing, renewalDateInput]);
+
+  // Auto-set Registration Date = TODAY whenever Processing opens modal / switches e-bike
+  useEffect(() => {
+    if (!canEditAsProcessing) return;
+    if (!detailModalVisible) return;
+
+    const todayISO = getTodayISO();
+
+    if (todayISO && todayISO !== registeredDateInput) {
+      setRegisteredDateInput(todayISO);
+    }
+
+    // ensure pickers are closed (since auto na)
+    if (showRegisteredPicker) setShowRegisteredPicker(false);
+    if (showRenewalPicker) setShowRenewalPicker(false);
+  }, [
+    canEditAsProcessing,
+    detailModalVisible,
+    selectedEbikeId,
+    registeredDateInput,
+    showRegisteredPicker,
+    showRenewalPicker
+  ]);
 
   const getEbikeStatus = (ebike, userDataStatus) => {
     return ebike?.status || userDataStatus || STATUS.PENDING;
@@ -425,7 +518,7 @@ const RiderScreen = ({ navigation, route }) => {
     }
   };
 
-  // ✅ for birthday/string dates
+  // for birthday/string dates
   const formatMaybeDate = (v) => {
     if (!v) return 'N/A';
     const d = toJSDate(v);
@@ -534,7 +627,7 @@ const RiderScreen = ({ navigation, route }) => {
 
         let imagesData = [];
         try {
-          // ✅ FIX #1: do NOT filter by type=="original" only; fetch all then extract likely gov-id urls
+          // FIX #1: do NOT filter by type=="original" only; fetch all then extract likely gov-id urls
           const imagesColRef = collection(db, 'riderRegistrations', userDoc.id, 'images');
           const imagesSnap = await getDocs(imagesColRef);
           const imageDocs = imagesSnap.docs.map(d => d.data() || {});
@@ -572,7 +665,7 @@ const RiderScreen = ({ navigation, route }) => {
 
       const tabStatus = getTabStatusFilter(activeTab);
 
-      // ✅ UPDATED: Inspect tab shows ONLY For Inspection + still needing inspection (no PASSED/FAILED)
+      // Inspect tab shows ONLY For Inspection + still needing inspection (no PASSED/FAILED)
       const ridersForTab = riderData.filter(r => {
         const list = r.ebikes || [];
         return list.some(e => {
@@ -650,7 +743,7 @@ const RiderScreen = ({ navigation, route }) => {
     setShowRegisteredPicker(false);
     setShowRenewalPicker(false);
 
-    // ✅ inspector prefill
+    // inspector prefill
     const incomingChecklist = ebike?.inspection?.checklist || {};
     setInspectionChecklist(normalizeChecklistDefaults(incomingChecklist));
     setInspectionNotes((ebike?.inspection?.notes || '').toString());
@@ -807,7 +900,7 @@ const RiderScreen = ({ navigation, route }) => {
     }
   };
 
-  // ✅ Helper for updating a selected ebike (used by validator + inspector)
+  // Helper for updating a selected ebike (used by validator + inspector)
   const updateSelectedEbikeStatus = async (nextStatus, extra = {}) => {
     if (!selectedRider?.userId || !selectedEbikeId) {
       Alert.alert('Error', 'No rider / e-bike selected');
@@ -847,7 +940,7 @@ const RiderScreen = ({ navigation, route }) => {
     fetchRiders();
   };
 
-  // ✅ NEW: Validator photo preview helper (used on For Inspection)
+  // Validator photo preview helper (used on For Inspection)
   const renderValidatorVerificationPhotos = () => {
     if (!selectedEbike) return null;
 
@@ -878,7 +971,7 @@ const RiderScreen = ({ navigation, route }) => {
             <Text style={styles.docsMiniLabel}>Photo of the Receipt</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {receipt.map((url, i) => (
-                <TouchableOpacity key={`fi_rec_${i}`} onPress={() => Linking.openURL(url)}>
+                <TouchableOpacity key={`fi_rec_${i}`} onPress={() => openImageViewer(url)}>
                   <Image source={{ uri: url }} style={styles.documentImage} />
                 </TouchableOpacity>
               ))}
@@ -891,7 +984,7 @@ const RiderScreen = ({ navigation, route }) => {
             <Text style={[styles.docsMiniLabel, { marginTop: 10 }]}>E-bike Photo</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {ebike.map((url, i) => (
-                <TouchableOpacity key={`fi_eb_${i}`} onPress={() => Linking.openURL(url)}>
+                <TouchableOpacity key={`fi_eb_${i}`} onPress={() => openImageViewer(url)}>
                   <Image source={{ uri: url }} style={styles.documentImage} />
                 </TouchableOpacity>
               ))}
@@ -902,7 +995,63 @@ const RiderScreen = ({ navigation, route }) => {
     );
   };
 
-  // ✅ INSPECTOR: save Passed/Failed + checklist + notes
+  // VERIFIED/REJECTED: Read-only verification docs preview (Receipt + E-bike photos)
+  const renderReadOnlyVerificationDocs = () => {
+    if (!selectedEbike) return null;
+
+    const receipt = Array.isArray(selectedEbike?.adminVerificationDocs?.receipt)
+      ? selectedEbike.adminVerificationDocs.receipt.filter(Boolean)
+      : [];
+
+    const ebike = Array.isArray(selectedEbike?.adminVerificationDocs?.ebikePhotos)
+      ? selectedEbike.adminVerificationDocs.ebikePhotos.filter(Boolean)
+      : [];
+
+    if (receipt.length === 0 && ebike.length === 0) {
+      return (
+        <View style={styles.detailSection}>
+          <Text style={styles.sectionTitle}>Verification Photos</Text>
+          <Text style={{ color: '#7F8C8D', fontSize: 12 }}>
+            No uploaded receipt/e-bike photos found.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.detailSection}>
+        <Text style={styles.sectionTitle}>Verification Photos</Text>
+
+        {receipt.length > 0 && (
+          <>
+            <Text style={styles.docsMiniLabel}>Photo of the Receipt</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {receipt.map((url, i) => (
+                <TouchableOpacity key={`ver_rec_${i}`} onPress={() => openImageViewer(url)}>
+                  <Image source={{ uri: url }} style={styles.documentImage} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {ebike.length > 0 && (
+          <>
+            <Text style={[styles.docsMiniLabel, { marginTop: 10 }]}>E-bike Photo</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {ebike.map((url, i) => (
+                <TouchableOpacity key={`ver_eb_${i}`} onPress={() => openImageViewer(url)}>
+                  <Image source={{ uri: url }} style={styles.documentImage} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+      </View>
+    );
+  };
+
+  // INSPECTOR: save Passed/Failed + checklist + notes
   const handleInspectorSetResult = async (result) => {
     try {
       if (!canActAsInspector) return;
@@ -914,16 +1063,36 @@ const RiderScreen = ({ navigation, route }) => {
       const now = new Date();
 
       const cleanedChecklist = normalizeChecklistDefaults(inspectionChecklist || {});
-      const missingRequired = CHECKLIST_ITEMS
-        .filter(i => i.required)
-        .filter(i => !cleanedChecklist[i.key] || cleanedChecklist[i.key] === '');
 
-      if (missingRequired.length > 0) {
+      // Require ALL checklist items answered (OK / FAIL / NA)
+      const unanswered = CHECKLIST_ITEMS.filter((i) => {
+        const v = normalizeChecklistValue(cleanedChecklist[i.key]);
+        return !CHECKLIST_ALLOWED_VALUES.includes(v);
+      });
+
+      if (unanswered.length > 0) {
         Alert.alert(
           'Checklist required',
-          'Please answer all required checklist items (OK / NOT OK / N/A).'
+          'Please answer ALL checklist items (OK / NOT OK / N/A).'
         );
         return;
+      }
+
+      // PASSED rule:
+      // Block PASSED if any FAIL exists EXCEPT trash_can & window_wiper
+      if (String(result).toUpperCase() === 'PASSED') {
+        const blockingFails = CHECKLIST_ITEMS.filter((i) => {
+          const v = normalizeChecklistValue(cleanedChecklist[i.key]);
+          return v === 'FAIL' && !PASS_FAIL_EXEMPT_FAIL_KEYS.has(i.key);
+        });
+
+        if (blockingFails.length > 0) {
+          Alert.alert(
+            'Cannot Pass',
+            'There are checklist items marked NOT OK. Only Trash Can and Window Wiper can be NOT OK and still PASS.'
+          );
+          return;
+        }
       }
 
       // PASSED -> keep status FOR_INSPECTION but will disappear from Inspect list (filtered out)
@@ -972,7 +1141,7 @@ const RiderScreen = ({ navigation, route }) => {
     }
   };
 
-  // ✅ Processing → Send for Validation
+  // Processing → Send for Validation
   const handleSendForValidation = async () => {
     try {
       if (!canEditAsProcessing) return;
@@ -992,17 +1161,18 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      if (!registeredDateInput) {
-        Alert.alert('Error', 'Please enter Registration Date');
+      // Registration Date is AUTO = TODAY (local), Renewal AUTO = +1 year (ENFORCED)
+      const regISO = getTodayISO();
+      const autoRenewISO = addYearsISO(regISO, 1);
+
+      if (!regISO || !autoRenewISO) {
+        Alert.alert('Error', 'Could not generate registration/renewal dates. Please try again.');
         return;
       }
 
-      // ✅ Renewal date is automatic (Registered + 1 year)
-      const autoRenewISO = addYearsISO(registeredDateInput, 1);
-      if (!autoRenewISO) {
-        Alert.alert('Error', 'Invalid Registration Date. Please select again.');
-        return;
-      }
+      // keep UI state consistent
+      if (regISO !== registeredDateInput) setRegisteredDateInput(regISO);
+      if (autoRenewISO !== renewalDateInput) setRenewalDateInput(autoRenewISO);
 
       const totalReceiptCount = (savedReceiptUrls?.length || 0) + (receiptImages?.length || 0);
       const totalEbikeCount = (savedEbikeUrls?.length || 0) + (ebikePhotoImages?.length || 0);
@@ -1016,7 +1186,7 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      // ✅ allow processing to SET/OVERRIDE plate number using manualPlateNumber
+      // allow processing to SET/OVERRIDE plate number using manualPlateNumber
       let finalPlateNumber = (manualPlateNumber || '').trim().toUpperCase();
       if (!finalPlateNumber) {
         finalPlateNumber = selectedEbike?.plateNumber ? String(selectedEbike.plateNumber).trim().toUpperCase() : '';
@@ -1065,7 +1235,7 @@ const RiderScreen = ({ navigation, route }) => {
 
         const old = normalized[idx] || {};
 
-        const regD = new Date(registeredDateInput);
+        const regD = new Date(regISO);
         const renD = new Date(autoRenewISO);
 
         const docsObj = {
@@ -1080,17 +1250,17 @@ const RiderScreen = ({ navigation, route }) => {
           type: 'Registration'
         };
 
-        // ✅ FIX #2: When Processing resubmits after FAILED inspection (or any resubmission),
+        // FIX #2: When Processing resubmits after FAILED inspection (or any resubmission),
         // reset inspection fields so it will show again to Inspector when sent back for inspection.
         normalized[idx] = {
           ...old,
           status: STATUS.FOR_VALIDATION,
           ebikeCategorySelected: selectedCategory,
-          registeredDate: regD,
-          renewalDate: renD, // ✅ AUTO
+          registeredDate: regD, //  AUTO TODAY
+          renewalDate: renD, //  AUTO +1 year
           registrationStatus: old?.registrationStatus || null,
           plateNumber: finalPlateNumber,
-          hasPlate: true, // ✅ ensure updated
+          hasPlate: true, // ensure updated
 
           adminVerificationDocs: docsObj,
           paymentDetails: preparedPayment,
@@ -1098,7 +1268,7 @@ const RiderScreen = ({ navigation, route }) => {
           submittedForValidationAt: now,
           submittedForValidationBy: auth.currentUser?.uid || '',
 
-          // ✅ clear any previous cycle inspection (FAILED/PASSED) so it can be inspected again
+          // clear any previous cycle inspection (FAILED/PASSED) so it can be inspected again
           inspectionResult: null,
           inspection: null,
           approvedForInspectionAt: null,
@@ -1156,7 +1326,7 @@ const RiderScreen = ({ navigation, route }) => {
     try {
       if (!canActAsValidator || activeTab !== STATUS.FOR_VALIDATION) return;
 
-      // ✅ BLOCK if no valid plate number
+      // BLOCK if no valid plate number
       const plate = (selectedEbike?.plateNumber || '').toString().trim().toUpperCase();
       if (!plate || !PLATE_REGEX.test(plate)) {
         Alert.alert(
@@ -1166,7 +1336,7 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      // ✅ FIX #2 safety: always reset inspection fields when moving to For Inspection
+      // FIX #2 safety: always reset inspection fields when moving to For Inspection
       await updateSelectedEbikeStatus(STATUS.FOR_INSPECTION, {
         approvedForInspectionAt: new Date(),
         approvedForInspectionBy: auth.currentUser?.uid || '',
@@ -1220,7 +1390,7 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
-      // ✅ BLOCK if no valid plate number
+      // BLOCK if no valid plate number
       const plate = (selectedEbike?.plateNumber || '').toString().trim().toUpperCase();
       if (!plate || !PLATE_REGEX.test(plate)) {
         Alert.alert(
@@ -1365,7 +1535,118 @@ const RiderScreen = ({ navigation, route }) => {
     }
   };
 
-  // ✅ COMBINED DOCS PREVIEW: saved (editable/remove) + new picked
+  // NEW: Delete rejected registration record (removes selected e-bike entry from Firestore)
+  const handleDeleteRejectedRecord = () => {
+    if (activeTab !== STATUS.REJECTED) return;
+
+    if (!selectedRider?.userId || selectedEbikeId === null || selectedEbikeId === undefined) {
+      Alert.alert('Error', 'No rider / e-bike selected');
+      return;
+    }
+
+    Alert.alert(
+      'Delete record?',
+      'This will permanently delete this REJECTED registration record from the database. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingRecord(true);
+
+              const userRef = doc(db, 'users', selectedRider.userId);
+
+              await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(userRef);
+                if (!snap.exists()) throw new Error('User document does not exist');
+
+                const data = snap.data() || {};
+                const ebikesRaw = Array.isArray(data?.ebikes) ? [...data.ebikes] : null;
+
+                if (ebikesRaw && ebikesRaw.length > 0) {
+                  // Find by stored id; fallback to index matching (for older records without id)
+                  const idx = ebikesRaw.findIndex((e, i) => {
+                    const eid = e?.id;
+                    if (eid !== null && eid !== undefined && String(eid) === String(selectedEbikeId)) return true;
+                    return String(i) === String(selectedEbikeId);
+                  });
+
+                  if (idx === -1) throw new Error('E-bike record not found');
+
+                  ebikesRaw.splice(idx, 1);
+
+                  const forStatus = ebikesRaw.map((e) => ({
+                    ...e,
+                    status: e?.status || data?.status || STATUS.PENDING
+                  }));
+
+                  const overallStatus = ebikesRaw.length > 0
+                    ? computeOverallUserStatus(forStatus)
+                    : STATUS.PENDING;
+
+                  const plates = ebikesRaw
+                    .map(e => (e?.plateNumber || '').toString().trim().toUpperCase())
+                    .filter(Boolean);
+
+                  transaction.update(userRef, {
+                    ebikes: ebikesRaw,
+                    status: overallStatus,
+                    plateNumbers: Array.from(new Set(plates)),
+                  });
+                } else {
+                  // legacy fallback: clear rejected fields only
+                  transaction.update(userRef, {
+                    status: STATUS.PENDING,
+
+                    rejectedAt: null,
+                    rejectedBy: null,
+                    rejectedReason: null,
+
+                    returnedAt: null,
+                    returnedBy: null,
+                    returnReason: null,
+
+                    submittedForValidationAt: null,
+                    submittedForValidationBy: null,
+                    approvedForInspectionAt: null,
+                    approvedForInspectionBy: null,
+
+                    validatorNotes: null,
+                    inspectionResult: null,
+                    inspection: null,
+
+                    adminVerificationDocs: null,
+                    paymentDetails: null,
+                    ebikeCategorySelected: null,
+                    registeredDate: null,
+                    renewalDate: null,
+                    registrationStatus: null,
+                    verifiedAt: null,
+                  });
+                }
+              });
+
+              setDetailModalVisible(false);
+              setSelectedEbikeId(null);
+              setSelectedRider(null);
+
+              fetchRiders();
+              Alert.alert('Deleted', 'Rejected registration record was deleted.');
+            } catch (e) {
+              console.error(e);
+              Alert.alert('Error', e.message || 'Could not delete record');
+            } finally {
+              setDeletingRecord(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // COMBINED DOCS PREVIEW: saved (editable/remove) + new picked
   const renderCombinedDocsPreview = (mode = 'pending') => {
     const allowRemoveSaved = canEditAsProcessing && mode === 'pending';
 
@@ -1389,7 +1670,7 @@ const RiderScreen = ({ navigation, route }) => {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {savedReceiptUrls.map((url, i) => (
                     <View key={`saved_rec_${i}`} style={styles.imageContainer}>
-                      <TouchableOpacity onPress={() => Linking.openURL(url)}>
+                      <TouchableOpacity onPress={() => openImageViewer(url)}>
                         <Image source={{ uri: url }} style={styles.documentImage} />
                       </TouchableOpacity>
 
@@ -1414,7 +1695,7 @@ const RiderScreen = ({ navigation, route }) => {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {savedEbikeUrls.map((url, i) => (
                     <View key={`saved_eb_${i}`} style={styles.imageContainer}>
-                      <TouchableOpacity onPress={() => Linking.openURL(url)}>
+                      <TouchableOpacity onPress={() => openImageViewer(url)}>
                         <Image source={{ uri: url }} style={styles.documentImage} />
                       </TouchableOpacity>
 
@@ -1484,7 +1765,7 @@ const RiderScreen = ({ navigation, route }) => {
     );
   };
 
-  // ✅ INSPECTOR UI: grouped checklist with OK / NOT OK / N/A
+  // INSPECTOR UI: grouped checklist with OK / NOT OK / N/A
   const renderInspectorChecklist = () => {
     const groups = CHECKLIST_ITEMS.reduce((acc, item) => {
       acc[item.group] = acc[item.group] || [];
@@ -1533,15 +1814,17 @@ const RiderScreen = ({ navigation, route }) => {
             <Text style={styles.auditSubTitle}>{groupName}</Text>
 
             {groups[groupName].map((item) => {
-              const cur = inspectionChecklist?.[item.key] || (item.required ? '' : 'NA');
-              const isMissingRequired = item.required && (!cur || cur === '');
+              const cur = normalizeChecklistValue(inspectionChecklist?.[item.key] || '');
+              const isMissingRequired = (!cur || cur === '');
+
               return (
                 <View key={item.key} style={styles.checkItemRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.checkItemLabel}>
                       {item.label}
-                      {item.required ? <Text style={{ color: '#F44336' }}> *</Text> : null}
+                      <Text style={{ color: '#F44336' }}> *</Text>
                     </Text>
+
                     {isMissingRequired ? (
                       <Text style={styles.checkItemMissing}>Required</Text>
                     ) : null}
@@ -1582,7 +1865,7 @@ const RiderScreen = ({ navigation, route }) => {
     );
   };
 
-  // ✅ RESTORED: Personal + E-bike info for Processing/Validator (and any non-inspector view)
+  // RESTORED: Personal + E-bike info for Processing/Validator (and any non-inspector view)
   const renderNonInspectorInfo = () => {
     if (!selectedRider) return null;
 
@@ -1677,7 +1960,7 @@ const RiderScreen = ({ navigation, route }) => {
               {selectedRider.images.map((imageUrl, index) => (
                 <TouchableOpacity
                   key={index}
-                  onPress={() => Linking.openURL(imageUrl)}
+                  onPress={() => openImageViewer(imageUrl)}
                 >
                   <Image source={{ uri: imageUrl }} style={styles.documentImage} />
                 </TouchableOpacity>
@@ -1687,6 +1970,9 @@ const RiderScreen = ({ navigation, route }) => {
             <Text style={{ color: '#7F8C8D', fontSize: 12 }}>No uploaded ID found.</Text>
           )}
         </View>
+
+        {/* Show receipt + e-bike photos in VERIFIED/REJECTED details */}
+        {(activeTab === STATUS.VERIFIED || activeTab === STATUS.REJECTED) ? renderReadOnlyVerificationDocs() : null}
       </>
     );
   };
@@ -1733,6 +2019,9 @@ const RiderScreen = ({ navigation, route }) => {
 
                 setInspectionChecklist(normalizeChecklistDefaults({}));
                 setInspectionNotes('');
+
+                setImageViewerVisible(false);
+                setImageViewerUrl(null);
               }}
             >
               <Feather name="x" size={24} color="#2C3E50" />
@@ -1770,10 +2059,10 @@ const RiderScreen = ({ navigation, route }) => {
                 </Text>
               </View>
 
-              {/* ✅ RESTORED INFO FOR PROCESSING + VALIDATOR (NON-INSPECTOR) */}
+              {/* RESTORED INFO FOR PROCESSING + VALIDATOR (NON-INSPECTOR) */}
               {!canActAsInspector && renderNonInspectorInfo()}
 
-              {/* ✅ INSPECTOR VIEW (ONLY) */}
+              {/* INSPECTOR VIEW (ONLY) */}
               {canActAsInspector && (
                 <>
                   <View style={styles.detailSection}>
@@ -1841,7 +2130,7 @@ const RiderScreen = ({ navigation, route }) => {
                         {selectedRider.images.map((imageUrl, index) => (
                           <TouchableOpacity
                             key={index}
-                            onPress={() => Linking.openURL(imageUrl)}
+                            onPress={() => openImageViewer(imageUrl)}
                           >
                             <Image source={{ uri: imageUrl }} style={styles.documentImage} />
                           </TouchableOpacity>
@@ -1856,10 +2145,10 @@ const RiderScreen = ({ navigation, route }) => {
                 </>
               )}
 
-              {/* ✅ KEEP processing UI */}
+              {/* KEEP processing UI */}
               {canEditAsProcessing && (
                 <>
-                  {/* ✅ Plate Number input (Pending/Returned) */}
+                  {/* Plate Number input (Pending/Returned) */}
                   <View style={styles.detailSection}>
                     <Text style={styles.sectionTitle}>Plate Number (Required)</Text>
                     <Text style={styles.auditHint}>Format: AB1234 (2 letters + 4 numbers)</Text>
@@ -1927,44 +2216,16 @@ const RiderScreen = ({ navigation, route }) => {
 
                     <Text style={styles.sectionTitle}>Registration Dates</Text>
 
-                    <TouchableOpacity
-                      style={[styles.dateButton, uploading && styles.dateButtonDisabled]}
-                      onPress={() => setShowRegisteredPicker(true)}
-                      disabled={uploading}
-                    >
+                    {/* Registration Date = AUTO TODAY (read-only) */}
+                    <View style={[styles.dateButton, styles.dateButtonDisabled]}>
                       <Feather name="calendar" size={20} color="#2E7D32" />
                       <Text style={styles.dateButtonText}>
-                        {registeredDateInput ? new Date(registeredDateInput).toLocaleDateString() : 'Select Registered Date'}
+                        {registeredDateInput
+                          ? new Date(registeredDateInput).toLocaleDateString()
+                          : new Date().toLocaleDateString()}
                       </Text>
-                    </TouchableOpacity>
-
-                    {showRegisteredPicker && (
-                      <DateTimePicker
-                        value={registeredDateInput ? new Date(registeredDateInput) : new Date()}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        onChange={(event, selectedDate) => {
-                          if (Platform.OS === 'android') setShowRegisteredPicker(false);
-                          if (selectedDate) {
-                            const iso = selectedDate.toISOString().split('T')[0];
-                            setRegisteredDateInput(iso);
-
-                            // ✅ auto renewal +1 year
-                            const auto = addYearsISO(iso, 1);
-                            if (auto) setRenewalDateInput(auto);
-                          }
-                        }}
-                      />
-                    )}
-
-                    {Platform.OS === 'ios' && showRegisteredPicker && (
-                      <TouchableOpacity
-                        style={styles.datePickerDoneButton}
-                        onPress={() => setShowRegisteredPicker(false)}
-                      >
-                        <Text style={styles.datePickerDoneText}>Done</Text>
-                      </TouchableOpacity>
-                    )}
+                    </View>
+                    <Text style={styles.auditHint}>Registration Date is automatically set to today.</Text>
 
                     {/* Renewal Date is automatic; no manual picker */}
                     <View style={[styles.dateButton, styles.dateButtonDisabled]}>
@@ -1972,10 +2233,12 @@ const RiderScreen = ({ navigation, route }) => {
                       <Text style={styles.dateButtonText}>
                         {renewalDateInput
                           ? new Date(renewalDateInput).toLocaleDateString()
-                          : (registeredDateInput ? new Date(addYearsISO(registeredDateInput, 1)).toLocaleDateString() : 'Auto Renewal Date (select Registered Date)')}
+                          : (registeredDateInput
+                            ? new Date(addYearsISO(registeredDateInput, 1)).toLocaleDateString()
+                            : new Date(addYearsISO(getTodayISO(), 1)).toLocaleDateString())}
                       </Text>
                     </View>
-                    <Text style={styles.auditHint}>Renewal Date is automatically set to 1 year after Registered Date.</Text>
+                    <Text style={styles.auditHint}>Renewal Date is automatically set to 1 year after Registration Date.</Text>
 
                     <TouchableOpacity
                       style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
@@ -2066,7 +2329,7 @@ const RiderScreen = ({ navigation, route }) => {
                         <Text style={styles.docsMiniLabel}>Photo of the Receipt</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                           {selectedEbike.adminVerificationDocs.receipt.map((url, i) => (
-                            <TouchableOpacity key={`v_rec_${i}`} onPress={() => Linking.openURL(url)}>
+                            <TouchableOpacity key={`v_rec_${i}`} onPress={() => openImageViewer(url)}>
                               <Image source={{ uri: url }} style={styles.documentImage} />
                             </TouchableOpacity>
                           ))}
@@ -2079,7 +2342,7 @@ const RiderScreen = ({ navigation, route }) => {
                         <Text style={[styles.docsMiniLabel, { marginTop: 10 }]}>E-bike Photo</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                           {selectedEbike.adminVerificationDocs.ebikePhotos.map((url, i) => (
-                            <TouchableOpacity key={`v_eb_${i}`} onPress={() => Linking.openURL(url)}>
+                            <TouchableOpacity key={`v_eb_${i}`} onPress={() => openImageViewer(url)}>
                               <Image source={{ uri: url }} style={styles.documentImage} />
                             </TouchableOpacity>
                           ))}
@@ -2164,6 +2427,30 @@ const RiderScreen = ({ navigation, route }) => {
                       <Text style={styles.modalButtonText}>Verify (Final)</Text>
                     </TouchableOpacity>
                   </View>
+                </View>
+              )}
+
+              {/* REJECTED: Delete option (removes record from database) */}
+              {(activeTab === STATUS.REJECTED) && !canActAsInspector && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.sectionTitle}>Delete Rejected Registration</Text>
+                  <Text style={styles.auditHint}>
+                    Permanently remove this rejected record from the database.
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.fullWidthActionButton,
+                      styles.rejectButton,
+                      deletingRecord && styles.buttonDisabled
+                    ]}
+                    onPress={handleDeleteRejectedRecord}
+                    disabled={deletingRecord}
+                  >
+                    <Text style={styles.modalButtonText}>
+                      {deletingRecord ? 'Deleting...' : 'Delete Record'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -2382,6 +2669,8 @@ const RiderScreen = ({ navigation, route }) => {
                         <Text style={styles.subInfoText}>
                           E-bike: {ebikeSummary}
                         </Text>
+
+                        {/* REMOVED: VERIFIED LIST THUMB PREVIEW (receipt + e-bike thumbnails) */}
                       </>
                     ) : (
                       <Text style={styles.subInfoText}>
@@ -2411,6 +2700,7 @@ const RiderScreen = ({ navigation, route }) => {
         />
 
         {renderRiderDetailsModal()}
+        {renderImageViewerModal()}
       </View>
     </SafeAreaView>
   );
@@ -2885,6 +3175,34 @@ const styles = StyleSheet.create({
   triBtnNa: {
     backgroundColor: '#95A5A6',
     borderColor: '#95A5A6',
+  },
+
+  fullWidthActionButton: {
+    width: '100%',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+
+  // IMAGE VIEWER MODAL
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+  },
+  imageViewerClose: {
+    position: 'absolute',
+    top: 45,
+    right: 18,
+    zIndex: 20,
+    padding: 8,
+  },
+  imageViewerImage: {
+    width: '100%',
+    height: '85%',
   },
 });
 

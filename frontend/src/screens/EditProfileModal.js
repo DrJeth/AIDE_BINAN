@@ -1,3 +1,4 @@
+// EditProfileModal.js
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -26,7 +27,11 @@ import {
 import {
   getFirestore,
   doc,
-  setDoc
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs
 } from 'firebase/firestore';
 
 import {
@@ -53,11 +58,17 @@ export default function EditProfileModal({
   const [contactNumber, setContactNumber] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ✅ Profile photo states
+  // ADDED: Name/Address fields
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [address, setAddress] = useState('');
+
+  // Profile photo states
   const [pickedPhotoUri, setPickedPhotoUri] = useState(null); // local uri
   const [previewPhotoUri, setPreviewPhotoUri] = useState(null); // show in UI
 
-  // ✅ Guards to prevent "reset/jump" while typing
+  // Guards to prevent "reset/jump" while typing
   const [initialized, setInitialized] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -72,6 +83,8 @@ export default function EditProfileModal({
 
   const normalizePhone = (value) => (value || '').replace(/\D/g, ''); // digits only
   const isValidPhonePH = (value) => /^09\d{9}$/.test(normalizePhone(value)); // 11 digits, starts 09
+
+  const trimText = (value) => (value || '').toString().trim();
 
   const markDirty = () => {
     if (!dirty) setDirty(true);
@@ -95,14 +108,21 @@ export default function EditProfileModal({
     }
   }, [visible]);
 
-  // ✅ Initialize fields ONLY ONCE per modal open, and only if user isn't typing
+  // Initialize fields ONLY ONCE per modal open, and only if user isn't typing
   useEffect(() => {
     if (!visible) return;
     if (initialized) return;
     if (dirty) return;
 
     const u = userData || {};
-    const hasAny = !!u.email || !!u.contactNumber || !!u.profileImage;
+    const hasAny =
+      !!u.email ||
+      !!u.contactNumber ||
+      !!u.profileImage ||
+      !!u.firstName ||
+      !!u.middleName ||
+      !!u.surname ||
+      !!u.address;
 
     // If userData is still empty (loading), wait
     if (!hasAny) return;
@@ -111,10 +131,16 @@ export default function EditProfileModal({
     setContactNumber(normalizePhone(u.contactNumber || ''));
     setPreviewPhotoUri(u.profileImage || null);
 
+    // ADDED: init name/address
+    setFirstName((u.firstName || u.name || '').toString());
+    setMiddleName((u.middleName || '').toString());
+    setSurname((u.surname || u.lastName || '').toString());
+    setAddress((u.address || '').toString());
+
     setInitialized(true);
   }, [visible, initialized, dirty, userKey, userData]);
 
-  // ✅ Convert local file URI to Blob (reliable in RN/Expo)
+  // Convert local file URI to Blob (reliable in RN/Expo)
   const uriToBlob = async (uri) => {
     return await new Promise((resolve, reject) => {
       try {
@@ -130,7 +156,7 @@ export default function EditProfileModal({
     });
   };
 
-  // ✅ Pick image from gallery
+  // Pick image from gallery
   const handlePickPhoto = async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -160,7 +186,7 @@ export default function EditProfileModal({
     }
   };
 
-  // ✅ Upload to Firebase Storage (returns downloadURL + path)
+  // Upload to Firebase Storage (returns downloadURL + path)
   const uploadProfilePhoto = async (localUri, uid) => {
     const storage = getStorage(app);
 
@@ -178,10 +204,53 @@ export default function EditProfileModal({
     return { url, path };
   };
 
+  // Resolve correct Firestore user document (prevents writing to a new doc accidentally)
+  const resolveUserDocRef = async (db, user) => {
+    // 1) If parent passed actual document id, use it
+    if (userDocId) return doc(db, 'users', String(userDocId));
+
+    // 2) If userData carries a doc id key (optional), use it
+    const possibleId = userData?.docId || userData?.userDocId || userData?.id;
+    if (possibleId) return doc(db, 'users', String(possibleId));
+
+    // 3) Otherwise, find by uid field
+    try {
+      const q = query(collection(db, 'users'), where('uid', '==', user.uid));
+      const snap = await getDocs(q);
+      if (!snap.empty) return snap.docs[0].ref;
+    } catch (e) {
+      // ignore and fallback
+    }
+
+    // 4) Fallback: docId = uid (last resort)
+    return doc(db, 'users', user.uid);
+  };
+
   const handleUpdateProfile = async () => {
-    // ✅ sanitize values before validate/save
+    // sanitize values before validate/save
     const nextEmail = normalizeEmail(email);
     const nextPhone = normalizePhone(contactNumber);
+
+    // sanitize name/address
+    const nextFirst = trimText(firstName);
+    const nextMiddle = trimText(middleName);
+    const nextSurname = trimText(surname);
+    const nextAddress = trimText(address);
+
+    if (!nextFirst) {
+      Alert.alert('Error', 'Name is required');
+      return;
+    }
+
+    if (!nextSurname) {
+      Alert.alert('Error', 'Surname is required');
+      return;
+    }
+
+    if (!nextAddress) {
+      Alert.alert('Error', 'Address is required');
+      return;
+    }
 
     if (!nextEmail) {
       Alert.alert('Error', 'Email is required');
@@ -213,19 +282,18 @@ export default function EditProfileModal({
 
       if (!user) throw new Error('No authenticated user');
 
-      const docIdToUse = userDocId || user.uid;
-      const userDocRef = doc(db, 'users', docIdToUse);
+      const userDocRef = await resolveUserDocRef(db, user);
       const roleToPersist = userRole || userData?.role || 'Rider';
 
       let emailChanged = false;
 
-      // ✅ If email changed, send verification link
+      //  If email changed, send verification link
       if (nextEmail !== ((user.email || '').trim().toLowerCase())) {
         await verifyBeforeUpdateEmail(user, nextEmail);
         emailChanged = true;
       }
 
-      // ✅ If new photo picked, upload and save URL
+      //  If new photo picked, upload and save URL
       let uploadedPhotoUrl = null;
       let uploadedPhotoPath = null;
 
@@ -234,7 +302,7 @@ export default function EditProfileModal({
         uploadedPhotoUrl = uploaded.url;
         uploadedPhotoPath = uploaded.path;
 
-        // ✅ OPTIONAL: delete old photo if stored
+        //  delete old photo if stored
         if (userData?.profileImagePath) {
           try {
             await deleteObject(ref(storage, userData.profileImagePath));
@@ -244,11 +312,17 @@ export default function EditProfileModal({
         }
       }
 
-      // ✅ ONLY these fields are allowed to change
+      // ONLY these fields are allowed to change (and now includes name/address)
       const updateData = {
         email: nextEmail,
         contactNumber: nextPhone,
         role: roleToPersist,
+
+        // ADDED
+        firstName: nextFirst,
+        middleName: nextMiddle,
+        surname: nextSurname,
+        address: nextAddress
       };
 
       if (uploadedPhotoUrl) {
@@ -258,14 +332,21 @@ export default function EditProfileModal({
 
       await setDoc(userDocRef, updateData, { merge: true });
 
-      // ✅ Update local state (Me.js) without changing name/address
+      // Update local state after save
       const updatedUserData = {
         ...userData,
         email: nextEmail,
         contactNumber: nextPhone,
         role: roleToPersist,
+
+        // ADDED edit prof
+        firstName: nextFirst,
+        middleName: nextMiddle,
+        surname: nextSurname,
+        address: nextAddress,
+
         profileImage: uploadedPhotoUrl ? uploadedPhotoUrl : userData?.profileImage,
-        profileImagePath: uploadedPhotoPath ? uploadedPhotoPath : userData?.profileImagePath,
+        profileImagePath: uploadedPhotoPath ? uploadedPhotoPath : userData?.profileImagePath
       };
 
       onUpdateUser?.(updatedUserData);
@@ -321,7 +402,7 @@ export default function EditProfileModal({
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {/* ✅ Profile Photo */}
+                {/*  Profile Photo */}
                 <View style={styles.photoBlock}>
                   <Image
                     source={
@@ -340,7 +421,63 @@ export default function EditProfileModal({
                   </TouchableOpacity>
                 </View>
 
-                {/* ✅ Email */}
+                {/*  ADDED: Name */}
+                <View style={styles.fieldWrapper}>
+                  <Text style={styles.label}>Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter name"
+                    value={firstName}
+                    onChangeText={(t) => {
+                      markDirty();
+                      setFirstName(t);
+                    }}
+                  />
+                </View>
+
+                {/*  ADDED: Middle Name */}
+                <View style={styles.fieldWrapper}>
+                  <Text style={styles.label}>Middle Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter middle name (optional)"
+                    value={middleName}
+                    onChangeText={(t) => {
+                      markDirty();
+                      setMiddleName(t);
+                    }}
+                  />
+                </View>
+
+                {/*  ADDED: Surname */}
+                <View style={styles.fieldWrapper}>
+                  <Text style={styles.label}>Surname</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter surname"
+                    value={surname}
+                    onChangeText={(t) => {
+                      markDirty();
+                      setSurname(t);
+                    }}
+                  />
+                </View>
+
+                {/*  ADDED: Address */}
+                <View style={styles.fieldWrapper}>
+                  <Text style={styles.label}>Address</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter address"
+                    value={address}
+                    onChangeText={(t) => {
+                      markDirty();
+                      setAddress(t);
+                    }}
+                  />
+                </View>
+
+                {/* Email */}
                 <View style={styles.fieldWrapper}>
                   <Text style={styles.label}>Email</Text>
                   <TextInput
@@ -349,7 +486,7 @@ export default function EditProfileModal({
                     value={email}
                     onChangeText={(t) => {
                       markDirty();
-                      setEmail(normalizeEmail(t)); // ✅ auto lowercase
+                      setEmail(normalizeEmail(t)); // auto lowercase
                     }}
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -357,7 +494,7 @@ export default function EditProfileModal({
                   <Text style={styles.hint}>Must be @gmail.com (lowercase)</Text>
                 </View>
 
-                {/* ✅ Contact Number */}
+                {/* Contact Number */}
                 <View style={styles.fieldWrapper}>
                   <Text style={styles.label}>Contact Number</Text>
                   <TextInput
@@ -366,7 +503,7 @@ export default function EditProfileModal({
                     value={contactNumber}
                     onChangeText={(t) => {
                       markDirty();
-                      setContactNumber(normalizePhone(t)); // ✅ digits only
+                      setContactNumber(normalizePhone(t)); // digits only
                     }}
                     keyboardType="phone-pad"
                     maxLength={11}
@@ -420,7 +557,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  // ✅ FIXED: no more huge height
+  //  FIXED: no more huge height
   modalContent: {
     width: '100%',
     maxWidth: 420,
@@ -429,7 +566,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
 
-    // ✅ keeps it compact
+    //  keeps it compact
     maxHeight: '62%',
   },
 
@@ -444,7 +581,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 
-  // ✅ FIXED: removed flex:1 so it won’t stretch
+  // FIXED: removed flex:1 so it won’t stretch
   formScroll: {},
   formContainer: {
     paddingHorizontal: 16,
