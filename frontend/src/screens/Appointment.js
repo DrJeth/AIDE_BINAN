@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   FlatList,
   Platform,
   Alert,
-  StatusBar
+  StatusBar,
+  ActivityIndicator
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { getAuth } from "firebase/auth";
@@ -29,7 +30,7 @@ export default function AppointmentScreen({ navigation }) {
     firstName: "",
     lastName: "",
     plateNumber: "Not Set", // primary plate (for saving appointment)
-    plateNumbers: [], //  ALL plates for display
+    plateNumbers: [], // ALL plates for display
     email: ""
   });
 
@@ -42,6 +43,13 @@ export default function AppointmentScreen({ navigation }) {
 
   const auth = getAuth();
   const db = getFirestore();
+
+  // ✅ Hide Schedule UI if there is already an active appointment (Pending/Approved)
+  const hasActiveAppointment = useMemo(() => {
+    return pendingAppointments.some(
+      (a) => a?.status === "Pending" || a?.status === "Approved"
+    );
+  }, [pendingAppointments]);
 
   // Collect ALL plates from: plateNumbers[] -> ebikes[] -> plateNumber
   const getAllPlateNumbers = (ud = {}) => {
@@ -81,7 +89,7 @@ export default function AppointmentScreen({ navigation }) {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate();
 
-  //  GENERAL RULE: bawal same hour (kahit anong oras)
+  // GENERAL RULE: bawal same hour (kahit anong oras)
   const sameHourLocal = (a, b) =>
     sameDayLocal(a, b) && a.getHours() === b.getHours();
 
@@ -100,7 +108,7 @@ export default function AppointmentScreen({ navigation }) {
     return day !== 0 && day !== 6;
   };
 
-  //  force selected time to 00/30 (Android may ignore minuteInterval)
+  // force selected time to 00/30 (Android may ignore minuteInterval)
   const snapTo30 = (time) => {
     const t = new Date(time);
     t.setSeconds(0);
@@ -122,7 +130,7 @@ export default function AppointmentScreen({ navigation }) {
     return t;
   };
 
-  //  align to next 30-min slot (for suggestions)
+  // align to next 30-min slot (for suggestions)
   const alignToNext30 = (dt) => {
     const d = new Date(dt);
     d.setSeconds(0);
@@ -162,6 +170,7 @@ export default function AppointmentScreen({ navigation }) {
 
   useEffect(() => {
     const fetchUserData = async () => {
+      setLoading(true);
       try {
         const currentUser = auth.currentUser;
         if (currentUser) {
@@ -253,6 +262,15 @@ export default function AppointmentScreen({ navigation }) {
 
   const handleScheduleAppointment = async () => {
     try {
+      // ✅ extra guard: if user already has active appointment, block scheduling
+      if (hasActiveAppointment) {
+        Alert.alert(
+          "Already Scheduled",
+          "You already have an appointment. Please cancel your pending appointment first before scheduling a new one."
+        );
+        return;
+      }
+
       // Basic profile validation
       if (!userData.firstName || !userData.lastName) {
         Alert.alert("Incomplete Profile", "Please complete your profile first");
@@ -264,7 +282,7 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
-      //  lock time to 00/30 before saving
+      // lock time to 00/30 before saving
       const snappedTime = snapTo30(selectedTime);
 
       // Combine date and time (LOCAL)
@@ -287,7 +305,7 @@ export default function AppointmentScreen({ navigation }) {
         return;
       }
 
-      //  Validate time: 8:00 AM – 5:00 PM only
+      // Validate time: 8:00 AM – 5:00 PM only
       if (!isWithinOfficeHours(appointmentDateTime)) {
         Alert.alert(
           "Unavailable Time",
@@ -302,17 +320,6 @@ export default function AppointmentScreen({ navigation }) {
         Alert.alert("Invalid Time", "Please select a future time.");
         return;
       }
-
-      // CHECK EXISTING PENDING (but DON'T delete yet)
-      // We will auto-cancel only AFTER the new slot passes conflict checks.
-      const existingPendingQuery = query(
-        collection(db, "appointments"),
-        where("uid", "==", auth.currentUser.uid),
-        where("status", "==", "Pending")
-      );
-      const existingPendingSnap = await getDocs(existingPendingQuery);
-      const existingPendingIds = existingPendingSnap.docs.map((d) => d.id);
-      const hadExistingPending = existingPendingIds.length > 0;
 
       // GLOBAL CONFLICT CHECK (same day, all riders)
       const dayStartLocal = new Date(
@@ -344,24 +351,12 @@ export default function AppointmentScreen({ navigation }) {
       const daySnap = await getDocs(dayQuery);
 
       // busy = Pending + Approved only (ignore Rejected)
-      // IMPORTANT: ignore own Pending appointment(s) because we are replacing them
       const busyDTs = daySnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter(
-          (a) =>
-            a?.appointmentDate &&
-            (a.status === "Pending" || a.status === "Approved")
-        )
-        .filter(
-          (a) =>
-            !(
-              a.uid === auth.currentUser.uid &&
-              a.status === "Pending"
-            )
-        )
+        .filter((a) => a?.appointmentDate && (a.status === "Pending" || a.status === "Approved"))
         .map((a) => new Date(a.appointmentDate));
 
-      // NEW RULE: conflict if SAME HOUR is already taken (kahit anong oras)
+      // conflict if SAME HOUR is already taken
       const conflictDT = busyDTs.find((busy) =>
         sameHourLocal(appointmentDateTime, busy)
       );
@@ -381,28 +376,6 @@ export default function AppointmentScreen({ navigation }) {
           )}\n\nSuggested available times (30-min slots):\n${suggestionText}`
         );
         return;
-      }
-
-      // AUTO-CANCEL OLD PENDING NOW (safe: new slot already valid & free)
-      if (hadExistingPending) {
-        try {
-          await Promise.all(
-            existingPendingIds.map((id) =>
-              deleteDoc(doc(db, "appointments", id))
-            )
-          );
-
-          // remove from UI list too
-          const idsSet = new Set(existingPendingIds);
-          setPendingAppointments((prev) => prev.filter((appt) => !idsSet.has(appt.id)));
-        } catch (e) {
-          console.error("Auto-cancel failed:", e);
-          Alert.alert(
-            "Error",
-            "Failed to auto-cancel your existing appointment. Please try again."
-          );
-          return;
-        }
       }
 
       // Use primary plate (first from plateNumbers) if exists
@@ -425,7 +398,7 @@ export default function AppointmentScreen({ navigation }) {
         createdAt: createdAtISO
       });
 
-      // Refresh list (functional update to avoid state issues)
+      // Add to UI list
       setPendingAppointments((prev) => [
         {
           id: newAppointmentRef.id,
@@ -445,9 +418,7 @@ export default function AppointmentScreen({ navigation }) {
 
       Alert.alert(
         "Appointment Scheduled",
-        hadExistingPending
-          ? "Your old pending appointment was automatically canceled and replaced with the new schedule."
-          : "Your appointment for E-Bike Registration has been scheduled successfully."
+        "Your appointment for E-Bike Registration has been scheduled successfully."
       );
     } catch (error) {
       console.error("Appointment scheduling error:", error);
@@ -459,9 +430,7 @@ export default function AppointmentScreen({ navigation }) {
     try {
       await deleteDoc(doc(db, "appointments", appointmentId));
 
-      setPendingAppointments(
-        pendingAppointments.filter((appt) => appt.id !== appointmentId)
-      );
+      setPendingAppointments((prev) => prev.filter((appt) => appt.id !== appointmentId));
 
       Alert.alert(
         "Appointment Canceled",
@@ -506,6 +475,7 @@ export default function AppointmentScreen({ navigation }) {
           <Text style={[styles.appointmentName, textStyle]}>
             {item.firstName} {item.lastName}
           </Text>
+
           <Text style={[styles.appointmentText, textStyle]}>
             Date: {appointmentDate.toLocaleDateString()} at{" "}
             {appointmentDate.toLocaleTimeString([], {
@@ -513,9 +483,11 @@ export default function AppointmentScreen({ navigation }) {
               minute: "2-digit"
             })}
           </Text>
+
           <Text style={[styles.appointmentStatus, textStyle]}>
             Status: {item.status}
           </Text>
+
           <Text style={[styles.plateNumberText, textStyle]}>
             E-Bike Plate: {item.plateNumber || "Not Set"}
           </Text>
@@ -529,10 +501,7 @@ export default function AppointmentScreen({ navigation }) {
               "Are you sure you want to cancel this appointment?",
               [
                 { text: "No", style: "cancel" },
-                {
-                  text: "Yes",
-                  onPress: () => handleCancelAppointment(item.id)
-                }
+                { text: "Yes", onPress: () => handleCancelAppointment(item.id) }
               ]
             );
           }}
@@ -573,13 +542,12 @@ export default function AppointmentScreen({ navigation }) {
             {/* User Information Section */}
             <View style={styles.userInfoContainer}>
               <Text style={styles.sectionTitle}>Your Information</Text>
+
               <View style={styles.userInfoRow}>
                 <Text style={styles.labelText}>Name:</Text>
                 <Text style={styles.valueText}>
                   {userData.firstName || userData.lastName
-                    ? `${userData.firstName || ""} ${
-                        userData.lastName || ""
-                      }`.trim()
+                    ? `${userData.firstName || ""} ${userData.lastName || ""}`.trim()
                     : userData.email || "Not set – please update your profile"}
                 </Text>
               </View>
@@ -590,76 +558,78 @@ export default function AppointmentScreen({ navigation }) {
               </View>
             </View>
 
-            {/* Appointment Scheduling Section */}
-            <View style={styles.appointmentContainer}>
-              <Text style={styles.sectionTitle}>Schedule New Appointment</Text>
+            {/* ✅ Schedule New Appointment (ONLY if NO active appointment + not loading) */}
+            {!loading && !hasActiveAppointment ? (
+              <View style={styles.appointmentContainer}>
+                <Text style={styles.sectionTitle}>Schedule New Appointment</Text>
 
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={styles.pickerButtonText}>
-                  Select Date: {selectedDate.toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={styles.pickerButtonText}>
+                    Select Date: {selectedDate.toLocaleDateString()}
+                  </Text>
+                </TouchableOpacity>
 
-              {showDatePicker && (
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  minimumDate={new Date()}
-                  onChange={(event, date) => {
-                    setShowDatePicker(Platform.OS === "ios");
-                    if (date) setSelectedDate(date);
-                  }}
-                />
-              )}
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    minimumDate={new Date()}
+                    onChange={(event, date) => {
+                      setShowDatePicker(Platform.OS === "ios");
+                      if (date) setSelectedDate(date);
+                    }}
+                  />
+                )}
 
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Text style={styles.pickerButtonText}>
-                  Select Time:{" "}
-                  {selectedTime.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  })}
-                </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <Text style={styles.pickerButtonText}>
+                    Select Time:{" "}
+                    {selectedTime.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })}
+                  </Text>
+                </TouchableOpacity>
 
-              {/* 30-min slots */}
-              {showTimePicker && (
-                <DateTimePicker
-                  value={selectedTime}
-                  mode="time"
-                  is24Hour={false}
-                  display="spinner"
-                  minuteInterval={30} // iOS supports; Android may ignore (snapTo30 will fix)
-                  onChange={(event, time) => {
-                    setShowTimePicker(Platform.OS === "ios");
+                {/* 30-min slots */}
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={selectedTime}
+                    mode="time"
+                    is24Hour={false}
+                    display="spinner"
+                    minuteInterval={30}
+                    onChange={(event, time) => {
+                      setShowTimePicker(Platform.OS === "ios");
+                      if (Platform.OS === "android" && event?.type === "dismissed") return;
+                      if (time) setSelectedTime(snapTo30(time));
+                    }}
+                  />
+                )}
 
-                    if (Platform.OS === "android" && event?.type === "dismissed")
-                      return;
+                <TouchableOpacity
+                  style={styles.scheduleButton}
+                  onPress={handleScheduleAppointment}
+                >
+                  <Text style={styles.scheduleButtonText}>Schedule Appointment</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
-                    if (time) {
-                      const cleanTime = snapTo30(time);
-                      setSelectedTime(cleanTime);
-                    }
-                  }}
-                />
-              )}
-
-              <TouchableOpacity
-                style={styles.scheduleButton}
-                onPress={handleScheduleAppointment}
-              >
-                <Text style={styles.scheduleButtonText}>
-                  Schedule Appointment
-                </Text>
-              </TouchableOpacity>
-            </View>
+            {/* Loading indicator (prevents UI flash) */}
+            {loading ? (
+              <View style={styles.loadingBox}>
+                <ActivityIndicator />
+                <Text style={styles.loadingText}>Loading appointments...</Text>
+              </View>
+            ) : null}
 
             {/* Appointments Section */}
             <View style={styles.pendingAppointmentsContainer}>
@@ -671,7 +641,7 @@ export default function AppointmentScreen({ navigation }) {
         renderItem={renderPendingAppointment}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
-          <Text style={styles.noAppointmentsText}>No appointments</Text>
+          !loading ? <Text style={styles.noAppointmentsText}>No appointments</Text> : null
         }
         contentContainerStyle={styles.content}
       />
@@ -787,5 +757,12 @@ const styles = StyleSheet.create({
   cancelButtonText: { color: "white", fontWeight: "bold" },
   hiddenCancelButtonText: { display: "none" },
 
-  noAppointmentsText: { color: "#666", textAlign: "center" }
+  noAppointmentsText: { color: "#666", textAlign: "center", marginTop: 10 },
+
+  loadingBox: {
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  loadingText: { marginTop: 8, color: "#666" }
 });
