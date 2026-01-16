@@ -38,6 +38,7 @@
 
         <button
           id="btnLogout"
+          type="button"
           class="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
         >
           Logout
@@ -71,6 +72,7 @@
           <div class="max-w-md">
             <button
               id="goLogin"
+              type="button"
               class="w-full rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 hover:from-slate-800 hover:to-slate-700 active:scale-[0.99] transition"
             >
               Super Admin Login
@@ -186,6 +188,7 @@
             <input
               id="loginEmail"
               type="email"
+              autocomplete="username"
               class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:ring-2 focus:ring-emerald-100"
             />
           </div>
@@ -195,12 +198,14 @@
             <input
               id="loginPass"
               type="password"
+              autocomplete="current-password"
               class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:ring-2 focus:ring-emerald-100"
             />
           </div>
 
           <button
             id="btnLogin"
+            type="button"
             class="w-full rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
           >
             Login
@@ -208,6 +213,7 @@
 
           <button
             id="backHome"
+            type="button"
             class="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold hover:bg-slate-50"
           >
             Back to Home
@@ -234,6 +240,7 @@
           <button
             class="tabBtn rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             data-tab="riders"
+            type="button"
           >
             Riders
           </button>
@@ -241,6 +248,7 @@
           <button
             class="tabBtn rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
             data-tab="admins"
+            type="button"
           >
             Admins
           </button>
@@ -249,6 +257,7 @@
             id="tabCreateAdmin"
             class="tabBtn hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
             data-tab="create"
+            type="button"
           >
             Create Admin
           </button>
@@ -256,6 +265,7 @@
           <button
             id="btnRefresh"
             class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+            type="button"
           >
             Refresh
           </button>
@@ -267,7 +277,6 @@
         <div class="flex items-center justify-between gap-3">
           <div class="text-sm font-semibold">Riders</div>
 
-          <!-- ✅ Download + count -->
           <div class="flex items-center gap-2">
             <button
               id="btnDownloadRidersListPdf"
@@ -330,7 +339,6 @@
         <div class="flex items-center justify-between gap-3">
           <div class="text-sm font-semibold">Admin Accounts</div>
 
-          <!-- ✅ Download + count -->
           <div class="flex items-center gap-2">
             <button
               id="btnDownloadAdminsListPdf"
@@ -373,64 +381,26 @@
         <div class="text-sm font-semibold text-emerald-900">Create Admin</div>
 
         <div class="mt-4 grid gap-3 sm:grid-cols-2">
-          <input
-            id="caFirst"
-            placeholder="First Name"
-            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
-          />
-          <input
-            id="caLast"
-            placeholder="Last Name"
-            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
-          />
-          <input
-            id="caEmail"
-            placeholder="Email"
-            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
-          />
-          <input
-            id="caPass"
-            type="password"
-            placeholder="Password"
-            class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
-          />
+          <input id="caFirst" placeholder="First Name" class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none" />
+          <input id="caLast" placeholder="Last Name" class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none" />
+          <input id="caEmail" placeholder="Email" class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none" />
+          <input id="caPass" type="password" placeholder="Password" class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none" />
 
-          <select
-            id="caTaskRole"
-            class="sm:col-span-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
-          >
+          <select id="caTaskRole" class="sm:col-span-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none">
             <option value="processor">Processing</option>
             <option value="validator">Validator</option>
             <option value="inspector">Inspector</option>
           </select>
 
-          <input
-            id="caPos"
-            placeholder="Position (optional)"
-            class="sm:col-span-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none"
-          />
+          <input id="caPos" placeholder="Position (optional)" class="sm:col-span-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 outline-none" />
         </div>
 
         <div class="mt-4 flex gap-2">
-          <button
-            id="btnCreateAdmin"
-            class="rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-800"
-          >
-            Create Admin
-          </button>
-
-          <button
-            id="btnClearCreate"
-            class="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
-          >
-            Clear
-          </button>
+          <button id="btnCreateAdmin" type="button" class="rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-800">Create Admin</button>
+          <button id="btnClearCreate" type="button" class="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50">Clear</button>
         </div>
 
-        <div
-          id="createMsg"
-          class="hidden mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-900"
-        ></div>
+        <div id="createMsg" class="hidden mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-900"></div>
       </div>
     </section>
   </main>
@@ -444,10 +414,7 @@
           <div class="text-xs text-slate-500 mt-0.5">Super Admin only</div>
         </div>
 
-        <button
-          id="btnCloseEditAdmin"
-          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50"
-        >
+        <button id="btnCloseEditAdmin" type="button" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50">
           Close
         </button>
       </div>
@@ -486,34 +453,25 @@
         </div>
 
         <div class="mt-4 flex flex-wrap gap-2">
-          <button
-            id="btnSaveEditAdmin"
-            class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-          >
+          <button id="btnSaveEditAdmin" type="button" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
             Save Changes
           </button>
 
-          <button
-            id="btnDeleteAdmin"
-            class="rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
-          >
+          <button id="btnDeleteAdmin" type="button" class="rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-100">
             Delete Admin
           </button>
         </div>
 
-        <div
-          id="editAdminMsg"
-          class="hidden mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"
-        ></div>
+        <div id="editAdminMsg" class="hidden mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></div>
       </div>
     </div>
   </div>
 
-  <!-- ✅ PDF libs (required for download) -->
+  <!-- ✅ PDF libs -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
 
-  <!-- ✅ Login validation + red highlights (works with main.js) -->
+  <!-- ✅ LOGIN validation (doesn't break main.js) -->
   <script>
     (function () {
       const viewLogin = document.getElementById("viewLogin");
@@ -553,51 +511,64 @@
 
       function classifyAuthText(t) {
         const s = String(t || "").toLowerCase();
-
         if (s.includes("auth/wrong-password") || (s.includes("wrong") && s.includes("password"))) return "WRONG_PASSWORD";
         if (s.includes("auth/invalid-credential") || s.includes("auth/invalid-login-credentials") || s.includes("invalid credential")) return "INVALID_CREDENTIAL";
         if (s.includes("auth/user-not-found") || (s.includes("user") && (s.includes("not found") || s.includes("no user")))) return "USER_NOT_FOUND";
         if (s.includes("auth/too-many-requests") || s.includes("too-many-requests")) return "TOO_MANY_REQUESTS";
-
         return "GENERIC";
       }
 
-      function setError(type, customText) {
+      function setError(type) {
         setInvalid(email, false);
         setInvalid(pass, false);
-
-        let text = customText || "Login failed. Please try again.";
 
         if (type === "EMPTY_BOTH") {
           setInvalid(email, true);
           setInvalid(pass, true);
-          text = "Please enter your email and password.";
-        } else if (type === "EMPTY_EMAIL") {
+          showMsg("Please enter your email and password.");
+          return;
+        }
+        if (type === "EMPTY_EMAIL") {
           setInvalid(email, true);
-          text = "Email is required.";
-        } else if (type === "EMPTY_PASS") {
+          showMsg("Email is required.");
+          return;
+        }
+        if (type === "EMPTY_PASS") {
           setInvalid(pass, true);
-          text = "Password is required.";
-        } else if (type === "INVALID_EMAIL") {
+          showMsg("Password is required.");
+          return;
+        }
+        if (type === "INVALID_EMAIL") {
           setInvalid(email, true);
-          text = "Please enter a valid email.";
-        } else if (type === "WRONG_PASSWORD") {
+          showMsg("Please enter a valid email.");
+          return;
+        }
+        if (type === "WRONG_PASSWORD") {
           setInvalid(pass, true);
-          text = "Wrong password. Please try again.";
-        } else if (type === "USER_NOT_FOUND") {
+          showMsg("Wrong password. Please try again.");
+          return;
+        }
+        if (type === "USER_NOT_FOUND") {
           setInvalid(email, true);
-          text = "Account not found. Please check your email.";
-        } else if (type === "INVALID_CREDENTIAL") {
+          showMsg("Account not found. Please check your email.");
+          return;
+        }
+        if (type === "INVALID_CREDENTIAL") {
           setInvalid(email, true);
           setInvalid(pass, true);
-          text = "Invalid email or password. Please try again.";
-        } else if (type === "TOO_MANY_REQUESTS") {
+          showMsg("Invalid email or password. Please try again.");
+          return;
+        }
+        if (type === "TOO_MANY_REQUESTS") {
           setInvalid(email, true);
           setInvalid(pass, true);
-          text = "Too many attempts. Please try again later.";
+          showMsg("Too many attempts. Please try again later.");
+          return;
         }
 
-        showMsg(text);
+        setInvalid(email, true);
+        setInvalid(pass, true);
+        showMsg("Login failed. Please try again.");
       }
 
       // remove red highlight when typing
@@ -606,19 +577,24 @@
           setInvalid(el, false);
           if (!msg.classList.contains("hidden")) hideMsg();
         });
-        el.addEventListener("blur", () => {
-          if (el === email) email.value = email.value.trim();
+      });
+
+      // Enter key triggers login click
+      [email, pass].forEach((el) => {
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") btn.click();
         });
       });
 
-      // ✅ on click login -> validate empty/invalid THEN block
+      // Validate ONLY when clicking Login (won't block when valid)
       btn.addEventListener(
         "click",
         (e) => {
           if (!isLoginVisible()) return;
 
-          const em = email.value.trim();
-          const pw = pass.value;
+          const em = (email.value || "").trim();
+          email.value = em; // write back trimmed
+          const pw = pass.value || "";
 
           setInvalid(email, false);
           setInvalid(pass, false);
@@ -642,20 +618,18 @@
             setError("EMPTY_PASS");
             return;
           }
-
           if (email.type === "email" && !email.checkValidity()) {
             e.preventDefault();
             e.stopImmediatePropagation();
             setError("INVALID_EMAIL");
             return;
           }
-
-          // ✅ valid inputs -> allow main.js to handle login normally
+          // ✅ valid -> main.js will run normally
         },
         true
       );
 
-      // ✅ if main.js updates #loginMsg, apply highlight
+      // If main.js shows errors via loginMsg, react + highlight
       const obs = new MutationObserver(() => {
         if (!isLoginVisible()) return;
         if (msg.classList.contains("hidden")) return;
@@ -665,38 +639,47 @@
         if (kind === "USER_NOT_FOUND") return setError("USER_NOT_FOUND");
         if (kind === "INVALID_CREDENTIAL") return setError("INVALID_CREDENTIAL");
         if (kind === "TOO_MANY_REQUESTS") return setError("TOO_MANY_REQUESTS");
-
-        setInvalid(email, true);
-        setInvalid(pass, true);
       });
 
       obs.observe(msg, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
-      // ✅ if main.js uses alert() for auth errors -> keep alert AND add red highlight + message
+      // Catch Firebase auth errors if they bubble unhandled
+      window.addEventListener("unhandledrejection", (ev) => {
+        if (!isLoginVisible()) return;
+
+        const r = ev && ev.reason ? ev.reason : null;
+        const code = r && (r.code || r.message) ? String(r.code || r.message) : "";
+        if (!code.toLowerCase().includes("auth/")) return;
+
+        ev.preventDefault();
+
+        const kind = classifyAuthText(code);
+        if (kind === "WRONG_PASSWORD") return setError("WRONG_PASSWORD");
+        if (kind === "USER_NOT_FOUND") return setError("USER_NOT_FOUND");
+        if (kind === "INVALID_CREDENTIAL") return setError("INVALID_CREDENTIAL");
+        if (kind === "TOO_MANY_REQUESTS") return setError("TOO_MANY_REQUESTS");
+
+        setError("GENERIC");
+      });
+
+      // If main.js uses alert() for auth errors -> keep alert + also show our UI
       const originalAlert = window.alert;
       window.alert = function (text) {
         try {
           if (isLoginVisible()) {
             const kind = classifyAuthText(text);
-
             if (kind === "WRONG_PASSWORD") setError("WRONG_PASSWORD");
             else if (kind === "USER_NOT_FOUND") setError("USER_NOT_FOUND");
             else if (kind === "INVALID_CREDENTIAL") setError("INVALID_CREDENTIAL");
             else if (kind === "TOO_MANY_REQUESTS") setError("TOO_MANY_REQUESTS");
-            else {
-              setInvalid(email, true);
-              setInvalid(pass, true);
-              showMsg(String(text || "Login failed. Please try again."));
-            }
           }
         } catch (err) {}
-
         return originalAlert.call(window, text);
       };
     })();
   </script>
 
-  <!-- ✅ Your existing app logic -->
+  <!-- ✅ Your existing app logic (keep this AFTER the validation script) -->
   <script type="module" src="/src/main.js"></script>
 
   <!-- ✅ PDF FEATURES (list downloads) -->
