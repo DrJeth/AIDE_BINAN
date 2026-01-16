@@ -1,3 +1,4 @@
+// HomeRider.js
 import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
@@ -185,7 +186,7 @@ const normalizeUserEbikes = (userData) => {
   ];
 };
 
-/**  Transactions latest -> oldest */
+/** Transactions latest -> oldest */
 const getEbikeTransactions = (ebike) => {
   const tx = Array.isArray(ebike?.transactionHistory) ? [...ebike.transactionHistory] : [];
 
@@ -209,6 +210,83 @@ const getEbikeTransactions = (ebike) => {
   return tx;
 };
 
+/* ===========================
+   ✅ REGISTRATION STEPPER HELPERS
+   Flow:
+   Processing → Validator → Inspector → Validator (Final) → Verified
+=========================== */
+const REG_STEPS = [
+  { key: "processing", label: "Processing" },
+  { key: "validator", label: "Validator" },
+  { key: "inspector", label: "Inspector" },
+  { key: "validator_final", label: "Validator" },
+  { key: "verified", label: "Verified" }
+];
+
+const normalizeStatusText = (v) => (v ?? "").toString().trim().toLowerCase();
+
+const getRegistrationStepperInfo = (rawStatus) => {
+  const s = normalizeStatusText(rawStatus);
+
+  if (s.includes("reject")) {
+    return {
+      index: 0,
+      mode: "rejected",
+      statusLabel: "Rejected",
+      nextText: "Your registration was rejected. Please check requirements and resubmit."
+    };
+  }
+
+  if (s.includes("verified") || s.includes("approved") || s === "done") {
+    return {
+      index: 4,
+      mode: "done",
+      statusLabel: "Verified",
+      nextText: "Registration verified ✅"
+    };
+  }
+
+  if (s.includes("inspection") || s.includes("inspector") || s.includes("for inspection")) {
+    return {
+      index: 2,
+      mode: "active",
+      statusLabel: "For Inspection",
+      nextText: "Waiting for Inspector to check your e-bike."
+    };
+  }
+
+  if (
+    s.includes("inspector to validator") ||
+    s.includes("for final") ||
+    s.includes("final validation") ||
+    s.includes("for verification") ||
+    s.includes("back to validator")
+  ) {
+    return {
+      index: 3,
+      mode: "active",
+      statusLabel: "For Final Validation",
+      nextText: "Waiting for Validator to finalize verification."
+    };
+  }
+
+  if (s.includes("validation") || s.includes("validator") || s.includes("for validation")) {
+    return {
+      index: 1,
+      mode: "active",
+      statusLabel: "For Validation",
+      nextText: "Waiting for Validator to review your registration."
+    };
+  }
+
+  return {
+    index: 0,
+    mode: "active",
+    statusLabel: "Processing",
+    nextText: "Waiting for Processing Admin to review and forward your registration."
+  };
+};
+
 export default function HomeRider({ navigation }) {
   const [userData, setUserData] = useState(null);
   const [userDocId, setUserDocId] = useState(null);
@@ -219,7 +297,7 @@ export default function HomeRider({ navigation }) {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [notifVisible, setNotifVisible] = useState(false);
 
-  //  multiple ebikes
+  // multiple ebikes
   const [selectedEbikeId, setSelectedEbikeId] = useState(null);
   const [showEbikePicker, setShowEbikePicker] = useState(false);
 
@@ -248,18 +326,18 @@ export default function HomeRider({ navigation }) {
   ]);
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
 
-  //  Notifications: appointment + registration (system)
+  // Notifications: appointment + registration (system)
   const [appointmentNotifs, setAppointmentNotifs] = useState([]);
   const [registrationNotifs, setRegistrationNotifs] = useState([]);
 
-  //  Seen tracker (badge count)
+  // Seen tracker (badge count)
   const [notifLastSeen, setNotifLastSeen] = useState({
     announcements: null,
     appointment: null,
     registration: null
   });
 
-  //  IMAGE VIEWER (for receipts / ebike photos / uploaded docs) — IN-APP PREVIEW ✅
+  // IMAGE VIEWER (in-app preview)
   const [imgViewerVisible, setImgViewerVisible] = useState(false);
   const [imgViewerUrl, setImgViewerUrl] = useState(null);
   const [imgViewerTitle, setImgViewerTitle] = useState("");
@@ -374,9 +452,10 @@ export default function HomeRider({ navigation }) {
 
       const plate = addNoPlateNumber ? null : addEbikeForm.plateNumber.trim().toUpperCase();
 
-      //  local duplicate vs YOUR current ebikes
+      // local duplicate check
       if (plate) {
-        const dupLocal = ebikes.some((e) => String(e?.plateNumber || "").toUpperCase() === plate);
+        const ebikesLocal = normalizeUserEbikes(userData || {});
+        const dupLocal = ebikesLocal.some((e) => String(e?.plateNumber || "").toUpperCase() === plate);
         if (dupLocal) {
           Alert.alert("Error", `Plate number already in your account: ${plate}`);
           return;
@@ -385,7 +464,7 @@ export default function HomeRider({ navigation }) {
 
       setAddEbikeLoading(true);
 
-      //  global uniqueness check (ignore sariling doc)
+      // global uniqueness check
       if (plate) {
         const plateQ = query(collection(db, "users"), where("plateNumbers", "array-contains", plate));
         const plateSnap = await getDocs(plateQ);
@@ -463,7 +542,7 @@ export default function HomeRider({ navigation }) {
         });
       });
 
-      //  update local state
+      // update local state
       setUserData((prev) => {
         const prevSafe = prev || {};
         const prevEbikesNorm = Array.isArray(prevSafe.ebikes) ? prevSafe.ebikes : [];
@@ -544,7 +623,6 @@ export default function HomeRider({ navigation }) {
     }
   };
 
-  // Refresh announcements (keeps old behavior but adds createdAtMs for badge)
   const refreshAnnouncements = async () => {
     try {
       const newsQuery = query(collection(db, "announcements"), orderBy("createdAt", "desc"));
@@ -573,7 +651,6 @@ export default function HomeRider({ navigation }) {
     }
   };
 
-  // Appointment notifications (Accepted / Rejected)
   const normalizeAppointmentStatus = (raw) => {
     const s = (raw ?? "").toString().trim().toLowerCase();
     if (!s) return null;
@@ -584,11 +661,10 @@ export default function HomeRider({ navigation }) {
     if (s.includes("reject") || s.includes("declin") || s.includes("cancel")) {
       return "Rejected";
     }
-    return null; // Pending / For Review etc => no notif
+    return null;
   };
 
   const extractAppointmentDate = (data) => {
-    // support many possible field names
     return (
       data?.appointmentDate ||
       data?.date ||
@@ -605,8 +681,6 @@ export default function HomeRider({ navigation }) {
       if (!uid && !docId) return;
 
       const apptCol = collection(db, "appointments");
-
-      // try multiple schemas (safe)
       const qs = [];
       if (uid) {
         qs.push(query(apptCol, where("uid", "==", uid)));
@@ -620,7 +694,6 @@ export default function HomeRider({ navigation }) {
 
       const snaps = await Promise.all(qs.map((qq) => getDocs(qq)));
 
-      // merge unique docs
       const map = new Map();
       snaps.forEach((snap) => {
         snap.docs.forEach((d) => {
@@ -671,7 +744,6 @@ export default function HomeRider({ navigation }) {
     }
   };
 
-  // Build registration verified/rejected notifications from userData
   useEffect(() => {
     try {
       if (!userData) {
@@ -714,14 +786,12 @@ export default function HomeRider({ navigation }) {
     }
   }, [userData]);
 
-  //  System notifications combined
   const systemNotifs = useMemo(() => {
     const all = [...(appointmentNotifs || []), ...(registrationNotifs || [])];
     all.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
     return all;
   }, [appointmentNotifs, registrationNotifs]);
 
-  // Unread count for badge
   const unreadCount = useMemo(() => {
     const annSeen = toMs(notifLastSeen?.announcements) ?? 0;
     const apptSeen = toMs(notifLastSeen?.appointment) ?? 0;
@@ -729,13 +799,11 @@ export default function HomeRider({ navigation }) {
 
     let count = 0;
 
-    // announcements
     (newsUpdates || []).forEach((n) => {
       const ms = Number(n?.createdAtMs || 0);
       if (ms > annSeen) count += 1;
     });
 
-    // system
     (systemNotifs || []).forEach((n) => {
       const ms = Number(n?.createdAtMs || 0);
       if (n?.category === "appointment" && ms > apptSeen) count += 1;
@@ -745,7 +813,6 @@ export default function HomeRider({ navigation }) {
     return count;
   }, [newsUpdates, systemNotifs, notifLastSeen]);
 
-  // Open notifications: mark all as seen (badge disappears after viewing)
   const openNotifications = async () => {
     setNotifVisible(true);
 
@@ -753,7 +820,6 @@ export default function HomeRider({ navigation }) {
     const next = { announcements: now, appointment: now, registration: now };
     setNotifLastSeen(next);
 
-    // save to Firestore so even after restart, badge stays correct
     try {
       if (userDocId) {
         await updateDoc(doc(db, "users", userDocId), { notifLastSeen: next });
@@ -808,7 +874,7 @@ export default function HomeRider({ navigation }) {
 
           if (ebikes.length > 0) setSelectedEbikeId(ebikes[0].id);
 
-          // initialize notifLastSeen if missing (so first time = no badge spam)
+          // notifLastSeen init
           const existingSeen = data?.notifLastSeen;
           if (existingSeen && (existingSeen.announcements || existingSeen.appointment || existingSeen.registration)) {
             setNotifLastSeen({
@@ -822,14 +888,12 @@ export default function HomeRider({ navigation }) {
             setNotifLastSeen(initSeen);
             try {
               await updateDoc(doc(db, "users", foundDocId), { notifLastSeen: initSeen });
-            } catch (e) {
+            } catch {
               // ignore
             }
           }
 
           await loadRiderDocuments(foundDocId);
-
-          // fetch appointment notifs after we know ids
           await refreshAppointmentNotifs(currentUser.uid, foundDocId);
         }
       } catch (error) {
@@ -850,7 +914,6 @@ export default function HomeRider({ navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  //  Periodic refresh for announcements + appointment notifications
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -910,6 +973,95 @@ export default function HomeRider({ navigation }) {
     const plate = e?.plateNumber ? String(e.plateNumber).toUpperCase() : "NO PLATE";
     const brand = e?.ebikeBrand ? ` • ${e.ebikeBrand}` : "";
     return `E-bike ${idx + 1}: ${plate}${brand}`;
+  };
+
+  /* ✅ Render Stepper (used in E-bike Details modal + NOW also in Home above buttons) */
+  const renderRegistrationStepper = (statusValue) => {
+    const info = getRegistrationStepperInfo(statusValue);
+    const currentIndex = info.index;
+
+    return (
+      <View style={styles.stepperWrap}>
+        <View style={styles.stepperTopRow}>
+          <Text style={styles.stepperTitle}>Registration Progress</Text>
+          <View
+            style={[
+              styles.stepperStatusPill,
+              info.mode === "rejected"
+                ? styles.stepperPillRejected
+                : info.mode === "done"
+                ? styles.stepperPillDone
+                : styles.stepperPillActive
+            ]}
+          >
+            <Text style={styles.stepperStatusPillText}>{info.statusLabel}</Text>
+          </View>
+        </View>
+
+        <View style={styles.stepperRow}>
+          {REG_STEPS.map((st, i) => {
+            const isDone = info.mode !== "rejected" && i < currentIndex;
+            const isActive = info.mode !== "rejected" && i === currentIndex;
+            const isLast = i === REG_STEPS.length - 1;
+
+            const dotStyle =
+              info.mode === "rejected"
+                ? styles.stepDotRejected
+                : isDone
+                ? styles.stepDotDone
+                : isActive
+                ? styles.stepDotActive
+                : styles.stepDotTodo;
+
+            const lineStyle =
+              info.mode === "rejected"
+                ? styles.stepLineRejected
+                : i < currentIndex
+                ? styles.stepLineDone
+                : styles.stepLineTodo;
+
+            return (
+              <React.Fragment key={st.key}>
+                <View style={[styles.stepDotBase, dotStyle]}>
+                  <Text style={styles.stepDotText}>
+                    {info.mode === "rejected" ? "!" : isDone ? "✓" : String(i + 1)}
+                  </Text>
+                </View>
+                {!isLast ? <View style={[styles.stepLineBase, lineStyle]} /> : null}
+              </React.Fragment>
+            );
+          })}
+        </View>
+
+        <View style={styles.stepLabelsRow}>
+          {REG_STEPS.map((st, i) => {
+            const isDone2 = info.mode !== "rejected" && i < currentIndex;
+            const isActive2 = info.mode !== "rejected" && i === currentIndex;
+
+            return (
+              <Text
+                key={st.key}
+                style={[
+                  styles.stepLabel,
+                  info.mode === "rejected"
+                    ? styles.stepLabelRejected
+                    : isDone2
+                    ? styles.stepLabelDone
+                    : isActive2
+                    ? styles.stepLabelActive
+                    : styles.stepLabelTodo
+                ]}
+                numberOfLines={1}
+              >
+                {st.label}
+              </Text>
+            );
+          })}
+        </View>
+
+        <Text style={styles.stepNextText}>{info.nextText}</Text>
+      </View>
+    );
   };
 
   const renderEbikePickerModal = () => {
@@ -1214,6 +1366,9 @@ export default function HomeRider({ navigation }) {
             >
               <Text style={styles.modalTitle}>E-bike Details</Text>
 
+              {/* ✅ Stepper guide (TOP of E-bike Details) */}
+              {renderRegistrationStepper(selectedEbike?.status || userData?.status || "Pending")}
+
               {ebikes.length > 1 && (
                 <View style={styles.detailSection}>
                   <Text style={styles.sectionTitle}>Select E-Bike Registration</Text>
@@ -1273,9 +1428,7 @@ export default function HomeRider({ navigation }) {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Plate Number</Text>
                   <Text style={styles.detailValue}>
-                    {selectedEbike?.plateNumber
-                      ? String(selectedEbike.plateNumber).toUpperCase()
-                      : "N/A"}
+                    {selectedEbike?.plateNumber ? String(selectedEbike.plateNumber).toUpperCase() : "N/A"}
                   </Text>
                 </View>
                 <View style={styles.detailRow}>
@@ -1292,9 +1445,7 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Chassis/Motor No.</Text>
-                  <Text style={styles.detailValue}>
-                    {selectedEbike?.chassisMotorNumber || "N/A"}
-                  </Text>
+                  <Text style={styles.detailValue}>{selectedEbike?.chassisMotorNumber || "N/A"}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Branch</Text>
@@ -1312,9 +1463,7 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>E-bike Status</Text>
-                  <Text style={styles.detailValue}>
-                    {selectedEbike?.status || userData.status || "Pending"}
-                  </Text>
+                  <Text style={styles.detailValue}>{selectedEbike?.status || userData.status || "Pending"}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Registration Status</Text>
@@ -1322,9 +1471,7 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Category</Text>
-                  <Text style={styles.detailValue}>
-                    {getCategoryLabel(selectedEbike?.ebikeCategorySelected)}
-                  </Text>
+                  <Text style={styles.detailValue}>{getCategoryLabel(selectedEbike?.ebikeCategorySelected)}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Registered Date</Text>
@@ -1336,9 +1483,7 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Payment Amount</Text>
-                  <Text style={styles.detailValue}>
-                    ₱{selectedEbike?.paymentDetails?.amount?.toFixed?.(2) || "0.00"}
-                  </Text>
+                  <Text style={styles.detailValue}>₱{selectedEbike?.paymentDetails?.amount?.toFixed?.(2) || "0.00"}</Text>
                 </View>
               </View>
 
@@ -1369,16 +1514,9 @@ export default function HomeRider({ navigation }) {
                     {allReceipt.length === 0 ? (
                       <Text style={styles.emptyDocsText}>No receipt photos.</Text>
                     ) : (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.docsScroll}
-                      >
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
                         {allReceipt.map((url, idx) => (
-                          <TouchableOpacity
-                            key={`all_r_${idx}`}
-                            onPress={() => openImageViewer(url, "Receipt Photo")}
-                          >
+                          <TouchableOpacity key={`all_r_${idx}`} onPress={() => openImageViewer(url, "Receipt Photo")}>
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           </TouchableOpacity>
                         ))}
@@ -1391,16 +1529,9 @@ export default function HomeRider({ navigation }) {
                     {allEbike.length === 0 ? (
                       <Text style={styles.emptyDocsText}>No e-bike photos.</Text>
                     ) : (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.docsScroll}
-                      >
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
                         {allEbike.map((url, idx) => (
-                          <TouchableOpacity
-                            key={`all_e_${idx}`}
-                            onPress={() => openImageViewer(url, "E-Bike Photo")}
-                          >
+                          <TouchableOpacity key={`all_e_${idx}`} onPress={() => openImageViewer(url, "E-Bike Photo")}>
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           </TouchableOpacity>
                         ))}
@@ -1414,11 +1545,7 @@ export default function HomeRider({ navigation }) {
                     <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
                       Rider Uploaded Documents
                     </Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.docsScroll}
-                    >
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
                       {riderDocs.map((d) => (
                         <TouchableOpacity
                           key={d.id}
@@ -1426,20 +1553,14 @@ export default function HomeRider({ navigation }) {
                           onPress={() => d.url && openImageViewer(d.url, "Rider Uploaded Document")}
                         >
                           {d.url ? (
-                            <Image
-                              source={{ uri: d.url }}
-                              style={styles.docThumb}
-                              resizeMode="cover"
-                            />
+                            <Image source={{ uri: d.url }} style={styles.docThumb} resizeMode="cover" />
                           ) : (
                             <View style={[styles.docThumb, styles.docThumbPlaceholder]}>
                               <Text style={styles.docThumbPlaceholderText}>No Image</Text>
                             </View>
                           )}
                           <View style={styles.docTypeBadge}>
-                            <Text style={styles.docTypeBadgeText}>
-                              {d.type === "original" ? "📝" : "✅"}
-                            </Text>
+                            <Text style={styles.docTypeBadgeText}>{d.type === "original" ? "📝" : "✅"}</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -1449,14 +1570,8 @@ export default function HomeRider({ navigation }) {
 
                 {!docsLoading && legacyAdminImgs.length > 0 && (
                   <>
-                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
-                      Admin Verification (Legacy)
-                    </Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.docsScroll}
-                    >
+                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Admin Verification (Legacy)</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
                       {legacyAdminImgs.map((url, index) => (
                         <TouchableOpacity
                           key={index.toString()}
@@ -1483,12 +1598,8 @@ export default function HomeRider({ navigation }) {
                   <Text style={styles.emptyDocsText}>No transactions recorded yet.</Text>
                 ) : (
                   txs.map((tx, idx) => {
-                    const rec = Array.isArray(tx?.adminVerificationDocs?.receipt)
-                      ? tx.adminVerificationDocs.receipt
-                      : [];
-                    const ebp = Array.isArray(tx?.adminVerificationDocs?.ebikePhotos)
-                      ? tx.adminVerificationDocs.ebikePhotos
-                      : [];
+                    const rec = Array.isArray(tx?.adminVerificationDocs?.receipt) ? tx.adminVerificationDocs.receipt : [];
+                    const ebp = Array.isArray(tx?.adminVerificationDocs?.ebikePhotos) ? tx.adminVerificationDocs.ebikePhotos : [];
                     const amt = Number(tx?.paymentDetails?.amount || 0);
 
                     return (
@@ -1622,7 +1733,6 @@ export default function HomeRider({ navigation }) {
     );
   };
 
-  //  IN-APP Image Viewer Modal (Zoom + Pan)
   const renderImageViewerModal = () => {
     const BASE_W = SCREEN_WIDTH;
     const BASE_H = SCREEN_HEIGHT * 0.72;
@@ -1716,11 +1826,18 @@ export default function HomeRider({ navigation }) {
           <Text style={styles.subtitleText}>Your journey starts here</Text>
         </View>
 
+        {/* ✅ TRACKER STEP-BY-STEP ABOVE THE TWO BUTTONS */}
+        <View style={styles.homeStepperContainer}>
+          {renderRegistrationStepper(selectedEbike?.status || userData?.status || "Pending")}
+        </View>
+
         {/* Quick Actions */}
         <View style={styles.quickActionsContainer}>
           <TouchableOpacity style={styles.quickActionButton} onPress={handleWhatsNew}>
             <Text style={styles.quickActionText}>E-bike Details</Text>
           </TouchableOpacity>
+
+          {/* ✅ NO CHANGE: Ordinance screen NOT modified (as you requested) */}
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate("Ordinance")}
@@ -1729,7 +1846,7 @@ export default function HomeRider({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/*  Green Route Section — REMOVED PICTURE  (Map preview only) */}
+        {/* Green Route Section (Map preview only) */}
         <View style={styles.mapPreviewContainer}>
           <View style={styles.mapPreviewHeader}>
             <Text style={styles.mapPreviewTitle}>Green Routes in Binan</Text>
@@ -1737,11 +1854,7 @@ export default function HomeRider({ navigation }) {
 
           <View style={styles.mapOnlyWrapper}>
             <View style={{ flex: 1 }}>
-              <WebView
-                originWhitelist={["*"]}
-                source={{ html: BINAN_MAPS_EMBED }}
-                style={styles.webview}
-              />
+              <WebView originWhitelist={["*"]} source={{ html: BINAN_MAPS_EMBED }} style={styles.webview} />
 
               <TouchableOpacity
                 style={styles.mapFloatingBtn}
@@ -1809,7 +1922,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: "700", color: "#2E7D32" },
   headerIcon: { width: 24, height: 24, tintColor: "#2E7D32" },
 
-  //  Bell + badge
   bellButton: { position: "relative", padding: 4 },
   badge: {
     position: "absolute",
@@ -1828,6 +1940,13 @@ const styles = StyleSheet.create({
   greetingSection: { paddingHorizontal: 20, paddingVertical: 15 },
   welcomeText: { fontSize: 22, fontWeight: "600", color: "#2E7D32" },
   subtitleText: { color: "gray", marginTop: 5 },
+
+  /* ✅ NEW: spacing for stepper above buttons */
+  homeStepperContainer: {
+    paddingHorizontal: 20,
+    marginTop: 2,
+    marginBottom: 6
+  },
 
   quickActionsContainer: {
     flexDirection: "row",
@@ -1859,11 +1978,8 @@ const styles = StyleSheet.create({
   mapPreviewTitle: { fontSize: 18, fontWeight: "700", color: "#2E7D32" },
 
   webview: { flex: 1 },
-
-  // ✅ Map-only wrapper (replaces carousel + picture)
   mapOnlyWrapper: { width: "100%", height: 250 },
 
-  // ✅ Floating button for map preview
   mapFloatingBtn: {
     position: "absolute",
     top: 10,
@@ -1876,12 +1992,7 @@ const styles = StyleSheet.create({
   mapFloatingBtnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 12 },
 
   newsContainer: { paddingHorizontal: 20, marginVertical: 15 },
-  newsSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 10,
-    color: "#2E7D32"
-  },
+  newsSectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10, color: "#2E7D32" },
   newsCard: { backgroundColor: "#F5F5F5", borderRadius: 10, padding: 15 },
   newsHeadline: { fontSize: 16, fontWeight: "600", marginBottom: 5 },
   newsDetails: { color: "#757575", marginBottom: 10 },
@@ -1956,14 +2067,6 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 8, color: "#2C3E50" },
-
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8
-  },
-
   detailRow: { flexDirection: "row", marginBottom: 6 },
   detailLabel: { width: "40%", fontSize: 13, fontWeight: "600", color: "#7F8C8D" },
   detailValue: { width: "60%", fontSize: 13, color: "#2C3E50", flexWrap: "wrap" },
@@ -1995,7 +2098,6 @@ const styles = StyleSheet.create({
   docsLoading: { flexDirection: "row", alignItems: "center" },
   docsLoadingText: { marginLeft: 8, fontSize: 13, color: "#555" },
   emptyDocsText: { fontSize: 13, color: "#7F8C8D" },
-
   docsScroll: { marginTop: 6 },
 
   docThumbContainer: { marginRight: 8, position: "relative" },
@@ -2038,13 +2140,7 @@ const styles = StyleSheet.create({
   auditRow: { flexDirection: "row", marginBottom: 6 },
   auditLabel: { width: "38%", color: "#7F8C8D", fontWeight: "700", fontSize: 12 },
   auditValue: { width: "62%", color: "#2C3E50", fontSize: 12 },
-  auditSubTitle: {
-    marginTop: 10,
-    marginBottom: 8,
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#2C3E50"
-  },
+  auditSubTitle: { marginTop: 10, marginBottom: 8, fontSize: 12, fontWeight: "800", color: "#2C3E50" },
   auditThumb: { width: 80, height: 80, borderRadius: 10, marginRight: 10, marginBottom: 6 },
 
   pickerItem: {
@@ -2075,8 +2171,6 @@ const styles = StyleSheet.create({
   },
   addNewEbikeBtnText: { color: "#2E7D32", fontWeight: "800" },
 
-  addNewEbikeBtnInline: { marginBottom: 0, paddingVertical: 6, paddingHorizontal: 10 },
-
   inputLabel: { fontSize: 13, fontWeight: "800", color: "#2C3E50", marginBottom: 6 },
   inputBox: {
     backgroundColor: "#F5F5F5",
@@ -2088,13 +2182,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   inputText: { fontSize: 14, color: "#000" },
-  helpSmall: {
-    marginTop: -6,
-    marginBottom: 12,
-    fontSize: 12,
-    color: "#777",
-    fontStyle: "italic"
-  },
+  helpSmall: { marginTop: -6, marginBottom: 12, fontSize: 12, color: "#777", fontStyle: "italic" },
 
   checkboxRowAdd: { flexDirection: "row", alignItems: "center", marginTop: 2, marginBottom: 14 },
   checkboxAdd: {
@@ -2112,25 +2200,57 @@ const styles = StyleSheet.create({
   checkboxTick: { color: "#FFF", fontSize: 12, fontWeight: "900" },
   checkboxTextAdd: { flex: 1, fontSize: 12, color: "#444" },
 
-  addSubmitBtn: {
-    backgroundColor: "#2E7D32",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 6
-  },
+  addSubmitBtn: { backgroundColor: "#2E7D32", paddingVertical: 12, borderRadius: 10, alignItems: "center", marginTop: 6 },
   addSubmitBtnText: { color: "#FFF", fontWeight: "900" },
 
-  addCancelBtn: {
-    backgroundColor: "#EEEEEE",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 10
-  },
+  addCancelBtn: { backgroundColor: "#EEEEEE", paddingVertical: 12, borderRadius: 10, alignItems: "center", marginTop: 10 },
   addCancelBtnText: { color: "#333", fontWeight: "900" },
 
   btnDisabled: { opacity: 0.6 },
+
+  /* ✅ STEPPER STYLES */
+  stepperWrap: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#EAEAEA"
+  },
+  stepperTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10
+  },
+  stepperTitle: { fontSize: 14, fontWeight: "900", color: "#2C3E50" },
+  stepperStatusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  stepperPillActive: { backgroundColor: "#E6F3EC", borderWidth: 1, borderColor: "#2E7D32" },
+  stepperPillDone: { backgroundColor: "#E6F3EC", borderWidth: 1, borderColor: "#2E7D32" },
+  stepperPillRejected: { backgroundColor: "#FFEBEE", borderWidth: 1, borderColor: "#D32F2F" },
+  stepperStatusPillText: { fontSize: 12, fontWeight: "900", color: "#2C3E50" },
+
+  stepperRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  stepDotBase: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  stepDotTodo: { backgroundColor: "#E0E0E0" },
+  stepDotActive: { backgroundColor: "#2E7D32" },
+  stepDotDone: { backgroundColor: "#2E7D32" },
+  stepDotRejected: { backgroundColor: "#D32F2F" },
+  stepDotText: { color: "#FFF", fontSize: 13, fontWeight: "900" },
+
+  stepLineBase: { flex: 1, height: 3, borderRadius: 999, marginHorizontal: 6 },
+  stepLineTodo: { backgroundColor: "#E0E0E0" },
+  stepLineDone: { backgroundColor: "#2E7D32" },
+  stepLineRejected: { backgroundColor: "#D32F2F" },
+
+  stepLabelsRow: { flexDirection: "row", justifyContent: "space-between" },
+  stepLabel: { flex: 1, textAlign: "center", fontSize: 10, fontWeight: "800" },
+  stepLabelTodo: { color: "#8A8A8A" },
+  stepLabelActive: { color: "#2E7D32" },
+  stepLabelDone: { color: "#2E7D32" },
+  stepLabelRejected: { color: "#D32F2F" },
+
+  stepNextText: { marginTop: 8, fontSize: 12, color: "#555", fontWeight: "700" },
 
   /* IMAGE VIEWER MODAL STYLES */
   viewerOverlay: {
@@ -2160,20 +2280,8 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   viewerCloseText: { fontSize: 16, fontWeight: "900", color: "#111" },
-  viewerTitle: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "900",
-    alignSelf: "center",
-    marginBottom: 6
-  },
-  viewerControlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 10
-  },
+  viewerTitle: { color: "#FFF", fontSize: 16, fontWeight: "900", alignSelf: "center", marginBottom: 6 },
+  viewerControlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 10 },
   viewerCtrlBtn: {
     width: 44,
     height: 44,
