@@ -876,7 +876,10 @@ export default function HomeRider({ navigation }) {
 
           // notifLastSeen init
           const existingSeen = data?.notifLastSeen;
-          if (existingSeen && (existingSeen.announcements || existingSeen.appointment || existingSeen.registration)) {
+          if (
+            existingSeen &&
+            (existingSeen.announcements || existingSeen.appointment || existingSeen.registration)
+          ) {
             setNotifLastSeen({
               announcements: existingSeen.announcements || null,
               appointment: existingSeen.appointment || null,
@@ -1086,7 +1089,7 @@ export default function HomeRider({ navigation }) {
             {ebikes.length === 0 ? (
               <Text style={styles.emptyDocsText}>No e-bike found.</Text>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled>
                 {ebikes.map((e, idx) => {
                   const isSelected = String(selectedEbike?.id) === String(e.id);
                   const reg = getRegistrationStatusFromEbike(e);
@@ -1157,6 +1160,8 @@ export default function HomeRider({ navigation }) {
               <ScrollView
                 contentContainerStyle={{ paddingBottom: 16 }}
                 showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
               >
                 <Text style={styles.modalTitle}>Add New E-Bike</Text>
                 <Text style={styles.auditHint}>
@@ -1360,9 +1365,13 @@ export default function HomeRider({ navigation }) {
               <Text style={styles.modalCloseText}>✕</Text>
             </TouchableOpacity>
 
+            {/* ✅ SCROLL FIX: add style flex:1 + nestedScrollEnabled */}
             <ScrollView
-              contentContainerStyle={styles.modalScrollContent}
+              style={styles.detailsScroll}
+              contentContainerStyle={styles.detailsScrollContent}
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
             >
               <Text style={styles.modalTitle}>E-bike Details</Text>
 
@@ -1514,7 +1523,12 @@ export default function HomeRider({ navigation }) {
                     {allReceipt.length === 0 ? (
                       <Text style={styles.emptyDocsText}>No receipt photos.</Text>
                     ) : (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.docsScroll}
+                        nestedScrollEnabled
+                      >
                         {allReceipt.map((url, idx) => (
                           <TouchableOpacity key={`all_r_${idx}`} onPress={() => openImageViewer(url, "Receipt Photo")}>
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
@@ -1529,7 +1543,12 @@ export default function HomeRider({ navigation }) {
                     {allEbike.length === 0 ? (
                       <Text style={styles.emptyDocsText}>No e-bike photos.</Text>
                     ) : (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.docsScroll}
+                        nestedScrollEnabled
+                      >
                         {allEbike.map((url, idx) => (
                           <TouchableOpacity key={`all_e_${idx}`} onPress={() => openImageViewer(url, "E-Bike Photo")}>
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
@@ -1545,7 +1564,12 @@ export default function HomeRider({ navigation }) {
                     <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
                       Rider Uploaded Documents
                     </Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.docsScroll}
+                      nestedScrollEnabled
+                    >
                       {riderDocs.map((d) => (
                         <TouchableOpacity
                           key={d.id}
@@ -1571,7 +1595,12 @@ export default function HomeRider({ navigation }) {
                 {!docsLoading && legacyAdminImgs.length > 0 && (
                   <>
                     <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Admin Verification (Legacy)</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.docsScroll}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.docsScroll}
+                      nestedScrollEnabled
+                    >
                       {legacyAdminImgs.map((url, index) => (
                         <TouchableOpacity
                           key={index.toString()}
@@ -1631,7 +1660,7 @@ export default function HomeRider({ navigation }) {
                         {rec.length > 0 && (
                           <>
                             <Text style={styles.auditSubTitle}>Photo of the Receipt</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
                               {rec.map((url, i) => (
                                 <TouchableOpacity
                                   key={`r_${idx}_${i}`}
@@ -1647,7 +1676,7 @@ export default function HomeRider({ navigation }) {
                         {ebp.length > 0 && (
                           <>
                             <Text style={styles.auditSubTitle}>E-bike Photo</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
                               {ebp.map((url, i) => (
                                 <TouchableOpacity
                                   key={`e_${idx}_${i}`}
@@ -1698,7 +1727,12 @@ export default function HomeRider({ navigation }) {
 
             <Text style={[styles.modalTitle, { marginBottom: 10 }]}>Announcements & Updates</Text>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={{ paddingBottom: 16 }}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
               {/* System Updates */}
               <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>System Updates</Text>
               {systemNotifs.length === 0 ? (
@@ -2021,7 +2055,8 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 16,
     paddingTop: 40,
-    paddingHorizontal: 16
+    paddingHorizontal: 16,
+    paddingBottom: 12 // ✅ helps last content not feel cut
   },
   notifCard: {
     width: "90%",
@@ -2054,11 +2089,22 @@ const styles = StyleSheet.create({
     right: 10,
     padding: 6,
     borderRadius: 16,
-    backgroundColor: "#EEEEEE"
+    backgroundColor: "#EEEEEE",
+    zIndex: 50
   },
   modalCloseText: { fontSize: 16, fontWeight: "700", color: "#333" },
   modalScrollContent: { paddingBottom: 24 },
   modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 16, color: "#2E7D32" },
+
+  /* ✅ NEW: E-bike Details Scroll fix styles */
+  detailsScroll: {
+    flex: 1,
+    width: "100%"
+  },
+  detailsScrollContent: {
+    paddingBottom: 40,
+    flexGrow: 1
+  },
 
   detailSection: {
     backgroundColor: "#F5F5F5",
@@ -2304,3 +2350,5 @@ const styles = StyleSheet.create({
   viewerScaleText: { color: "#FFF", fontWeight: "900" },
   viewerHint: { color: "rgba(255,255,255,0.75)", fontSize: 12, textAlign: "center", marginBottom: 10 }
 });
+
+

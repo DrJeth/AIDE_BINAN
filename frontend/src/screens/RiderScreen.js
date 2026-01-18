@@ -113,17 +113,6 @@ const addYearsISO = (isoDate, years = 1) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-// ✅ NEW: check if renewalDate is expired (local midnight compare)
-const isRenewalExpired = (renewalDateValue) => {
-  const d = toJSDate(renewalDateValue);
-  if (!d) return false;
-  const renewal = new Date(d);
-  renewal.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return renewal.getTime() < today.getTime();
-};
-
 // inspector list should only show those still needing inspection
 const getInspectionResultUpper = (ebike) =>
   (ebike?.inspectionResult || ebike?.inspection?.result || '')
@@ -459,12 +448,6 @@ const RiderScreen = ({ navigation, route }) => {
   const canActAsInspector =
     (adminRole || 'processing') === 'inspector' &&
     activeTab === INSPECT_TAB;
-
-  // ✅ NEW: Renewal allowed inside VERIFIED tab (keeps status VERIFIED)
-  const canRenewInVerified =
-    !canActAsInspector &&
-    activeTab === STATUS.VERIFIED &&
-    ((adminRole || 'processing') === 'processing' || (adminRole || 'processing') === 'validator');
 
   // Auto renewal date = Registered + 1 year (processing only)
   useEffect(() => {
@@ -1428,7 +1411,7 @@ const RiderScreen = ({ navigation, route }) => {
       const userRef = doc(db, 'users', selectedRider.userId);
       const now = new Date();
 
-      await runTransaction(db, async (transaction) => {
+      await runTransaction(dbx, async (transaction) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists()) throw new Error('User document does not exist');
 
@@ -1486,173 +1469,6 @@ const RiderScreen = ({ navigation, route }) => {
     } catch (e) {
       console.error(e);
       Alert.alert('Error', e.message || 'Could not verify');
-    }
-  };
-
-  // ✅ NEW: VERIFIED TAB RENEWAL (stay VERIFIED; update dates + payment + docs; add txHistory)
-  const startRenewal = () => {
-    if (!selectedEbike) return;
-
-    const todayISO = getTodayISO();
-    const nextRenewISO = addYearsISO(todayISO, 1);
-
-    setShowRenewForm(true);
-
-    // auto dates for renewal
-    setRegisteredDateInput(todayISO);
-    setRenewalDateInput(nextRenewISO);
-
-    // require new upload for renewal
-    setReceiptImages([]);
-    setEbikePhotoImages([]);
-
-    // payment needs re-type
-    setPaymentAmount('');
-
-    // keep old saved URLs for preview (Old Photos)
-    // savedReceiptUrls / savedEbikeUrls already set by prefill
-
-    // clear misc
-    setValidatorNotes('');
-    setManualPlateError('');
-  };
-
-  const cancelRenewal = () => {
-    setShowRenewForm(false);
-    setReceiptImages([]);
-    setEbikePhotoImages([]);
-    setPaymentAmount('');
-
-    // restore date inputs to existing ebike dates (so view stays consistent)
-    setRegisteredDateInput(toISODate(selectedEbike?.registeredDate));
-    setRenewalDateInput(toISODate(selectedEbike?.renewalDate));
-  };
-
-  const handleVerifyRenewal = async () => {
-    try {
-      if (!canRenewInVerified || !showRenewForm) return;
-
-      if (!selectedRider?.userId || !selectedEbikeId || !selectedEbike) {
-        Alert.alert('Error', 'No rider / e-bike selected');
-        return;
-      }
-
-      if (!paymentAmount || isNaN(parseFloat(paymentAmount))) {
-        Alert.alert('Invalid Payment', 'Please enter a valid payment amount for renewal.');
-        return;
-      }
-
-      // Require NEW uploads (renewal should upload again)
-      if ((receiptImages?.length || 0) === 0) {
-        Alert.alert('Required', 'Please upload a NEW Photo of the Receipt for renewal.');
-        return;
-      }
-      if ((ebikePhotoImages?.length || 0) === 0) {
-        Alert.alert('Required', 'Please upload a NEW E-bike Photo for renewal.');
-        return;
-      }
-
-      const regISO = getTodayISO();
-      const renISO = addYearsISO(regISO, 1);
-
-      if (!regISO || !renISO) {
-        Alert.alert('Error', 'Could not generate renewal dates. Please try again.');
-        return;
-      }
-
-      // upload NEW docs
-      const receiptUploadedUrls = await uploadImagesToFirebase(receiptImages, 'renewal_receipt');
-      const ebikeUploadedUrls = await uploadImagesToFirebase(ebikePhotoImages, 'renewal_ebike_photo');
-
-      const finalReceiptUrls = (receiptUploadedUrls || []).filter(Boolean);
-      const finalEbikeUrls = (ebikeUploadedUrls || []).filter(Boolean);
-
-      if (finalReceiptUrls.length === 0 || finalEbikeUrls.length === 0) {
-        Alert.alert('Upload Failed', 'Receipt and E-bike photos are required for renewal. Please upload again.');
-        return;
-      }
-
-      const userRef = doc(db, 'users', selectedRider.userId);
-      const now = new Date();
-
-      await runTransaction(db, async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists()) throw new Error('User document does not exist');
-
-        const data = userDoc.data() || {};
-        const ebikes = Array.isArray(data?.ebikes) ? [...data.ebikes] : [];
-        const normalized = ebikes.length > 0 ? ebikes : normalizeUserEbikes(data);
-
-        const idx = normalized.findIndex(e => String(e?.id) === String(selectedEbikeId));
-        if (idx === -1) throw new Error('Selected e-bike not found');
-
-        const old = normalized[idx] || {};
-
-        const regD = new Date(regISO);
-        const renD = new Date(renISO);
-
-        const docsObj = {
-          receipt: finalReceiptUrls,
-          ebikePhotos: finalEbikeUrls,
-        };
-
-        // renewal payment (verified on click)
-        const renewalPayment = {
-          amount: parseFloat(paymentAmount),
-          preparedBy: auth.currentUser?.uid || '',
-          preparedAt: now,
-          verifiedBy: auth.currentUser?.uid || '',
-          verifiedAt: now,
-          type: 'Renewal',
-        };
-
-        let txHistory = Array.isArray(old?.transactionHistory) ? [...old.transactionHistory] : [];
-        txHistory.push({
-          type: 'Renewal',
-          registeredDate: regD,
-          renewalDate: renD,
-          paymentDetails: renewalPayment,
-          adminVerificationDocs: docsObj,
-          createdAt: now,
-          createdBy: auth.currentUser?.uid || '',
-        });
-
-        // ✅ keep status VERIFIED (important request)
-        normalized[idx] = {
-          ...old,
-          status: STATUS.VERIFIED,
-          registrationStatus: 'Active',
-          registeredDate: regD,
-          renewalDate: renD,
-          paymentDetails: renewalPayment,
-          adminVerificationDocs: docsObj,
-          transactionHistory: txHistory,
-
-          // optional marker (won't break old data)
-          lastRenewedAt: now,
-          lastRenewedBy: auth.currentUser?.uid || '',
-        };
-
-        const overallStatus = computeOverallUserStatus(normalized);
-
-        transaction.update(userRef, {
-          ebikes: normalized,
-          status: overallStatus,
-        });
-      });
-
-      // reset UI
-      setReceiptImages([]);
-      setEbikePhotoImages([]);
-      setPaymentAmount('');
-      setShowRenewForm(false);
-
-      fetchRiders();
-      Alert.alert('Renewed', 'Renewal has been saved and verified. Dates are updated (Today + 1 year).');
-      setDetailModalVisible(false);
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', e.message || 'Could not renew');
     }
   };
 
@@ -2135,21 +1951,6 @@ const RiderScreen = ({ navigation, route }) => {
               </Text>
             </View>
           ) : null}
-
-          {/* ✅ small status info */}
-          {(activeTab === STATUS.VERIFIED) ? (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Renewal Status:</Text>
-              <Text style={[
-                styles.detailValue,
-                isRenewalExpired(selectedEbike?.renewalDate)
-                  ? { color: '#F44336', fontWeight: '800' }
-                  : { color: '#2E7D32', fontWeight: '800' }
-              ]}>
-                {isRenewalExpired(selectedEbike?.renewalDate) ? 'EXPIRED' : 'ACTIVE'}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.detailSection}>
@@ -2172,120 +1973,6 @@ const RiderScreen = ({ navigation, route }) => {
 
         {/* Show receipt + e-bike photos in VERIFIED/REJECTED details */}
         {(activeTab === STATUS.VERIFIED || activeTab === STATUS.REJECTED) ? renderReadOnlyVerificationDocs() : null}
-
-        {/* ✅ NEW: Renewal editor inside VERIFIED (keeps it in VERIFIED list) */}
-        {(activeTab === STATUS.VERIFIED && canRenewInVerified) ? (
-          <View style={styles.detailSection}>
-            <Text style={styles.sectionTitle}>Renew Registration</Text>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Current Registered:</Text>
-              <Text style={styles.detailValue}>{formatDate(selectedEbike?.registeredDate)}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Current Renewal:</Text>
-              <Text style={styles.detailValue}>{formatDate(selectedEbike?.renewalDate)}</Text>
-            </View>
-
-            {!showRenewForm ? (
-              <>
-                <Text style={styles.auditHint}>
-                  This will keep the record in <Text style={{ fontWeight: '800' }}>Verified</Text> while updating dates + payment + new photos.
-                </Text>
-
-                <TouchableOpacity
-                  style={[styles.fullWidthActionButton, styles.verifyButton]}
-                  onPress={startRenewal}
-                  disabled={uploading}
-                >
-                  <Text style={styles.modalButtonText}>
-                    {isRenewalExpired(selectedEbike?.renewalDate) ? 'Renew Now (Expired)' : 'Renew / Update'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.auditHint}>
-                  Registered Date will be set to <Text style={{ fontWeight: '800' }}>Today</Text> and Renewal Date to <Text style={{ fontWeight: '800' }}>Today + 1 year</Text>.
-                </Text>
-
-                <Text style={styles.sectionTitle}>Payment (Renewal)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter Renewal Payment Amount"
-                  keyboardType="numeric"
-                  value={paymentAmount}
-                  onChangeText={setPaymentAmount}
-                  editable={!uploading}
-                />
-
-                <Text style={styles.sectionTitle}>Renewal Dates</Text>
-                <View style={[styles.dateButton, styles.dateButtonDisabled]}>
-                  <Feather name="calendar" size={20} color="#2E7D32" />
-                  <Text style={styles.dateButtonText}>
-                    {registeredDateInput
-                      ? new Date(registeredDateInput).toLocaleDateString()
-                      : new Date(getTodayISO()).toLocaleDateString()}
-                  </Text>
-                </View>
-
-                <View style={[styles.dateButton, styles.dateButtonDisabled]}>
-                  <Feather name="calendar" size={20} color="#2E7D32" />
-                  <Text style={styles.dateButtonText}>
-                    {renewalDateInput
-                      ? new Date(renewalDateInput).toLocaleDateString()
-                      : new Date(addYearsISO(getTodayISO(), 1)).toLocaleDateString()}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-                  onPress={() => pickImagesGeneric(setReceiptImages)}
-                  disabled={uploading}
-                >
-                  <Feather name="upload" size={24} color={uploading ? '#999' : '#2E7D32'} />
-                  <Text style={[styles.uploadButtonText, uploading && styles.uploadButtonTextDisabled]}>
-                    {uploading ? 'Uploading...' : 'Upload NEW Photo of the Receipt'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-                  onPress={() => pickImagesGeneric(setEbikePhotoImages)}
-                  disabled={uploading}
-                >
-                  <Feather name="upload" size={24} color={uploading ? '#999' : '#2E7D32'} />
-                  <Text style={[styles.uploadButtonText, uploading && styles.uploadButtonTextDisabled]}>
-                    {uploading ? 'Uploading...' : 'Upload NEW E-bike Photo'}
-                  </Text>
-                </TouchableOpacity>
-
-                {renderCombinedDocsPreview('renewal')}
-
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.cancelRenewButton, uploading && styles.buttonDisabled]}
-                    onPress={cancelRenewal}
-                    disabled={uploading}
-                  >
-                    <Text style={styles.modalButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.verifyButton, uploading && styles.buttonDisabled]}
-                    onPress={handleVerifyRenewal}
-                    disabled={uploading}
-                  >
-                    <Text style={styles.modalButtonText}>
-                      {uploading ? 'Uploading...' : 'Verify Renewal'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        ) : null}
       </>
     );
   };
@@ -2982,6 +2669,8 @@ const RiderScreen = ({ navigation, route }) => {
                         <Text style={styles.subInfoText}>
                           E-bike: {ebikeSummary}
                         </Text>
+
+                        {/* REMOVED: VERIFIED LIST THUMB PREVIEW (receipt + e-bike thumbnails) */}
                       </>
                     ) : (
                       <Text style={styles.subInfoText}>
@@ -3518,3 +3207,5 @@ const styles = StyleSheet.create({
 });
 
 export default RiderScreen;
+
+

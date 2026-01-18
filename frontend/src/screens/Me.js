@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
 import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
 import {
@@ -18,14 +18,16 @@ import {
   collection,
   query,
   where,
-  getDocs
+  getDocs,
 } from "firebase/firestore";
 import { app } from "../config/firebaseConfig";
 import EditProfileModal from "./EditProfileModal";
 import TermsService from "./TermsService";
 import SettingsRider from "./SettingRider";
 
+
 const DEFAULT_AVATAR = require("../../assets/me.png");
+
 
 export default function Me({ navigation }) {
   const [userData, setUserData] = useState({
@@ -34,85 +36,92 @@ export default function Me({ navigation }) {
     email: "",
     profileImage: null,
     contactNumber: "",
-    address: ""
+    address: "",
   });
 
+
   const [userRole, setUserRole] = useState(null);
-  const [userRoleLabel, setUserRoleLabel] = useState(""); // ADDED for display label
+  const [userRoleLabel, setUserRoleLabel] = useState("");
   const [userDocId, setUserDocId] = useState(null);
   const [loading, setLoading] = useState(true);
+
 
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
 
-  // build role label using Firestore field adminTaskRole
-  // adminTaskRole values expected: "processing" | "validator" | "inspector"
+
   const buildRoleLabel = (data) => {
-    const adminTask = (data?.adminTaskRole || "").toString().trim(); // ✅ IMPORTANT FIELD
+    const adminTask = (data?.adminTaskRole || "").toString().trim();
     const rawRole = (data?.role || (adminTask ? "Admin" : "Rider")).toString().trim();
 
-    // If not admin, show role as-is
+
     if (rawRole.toLowerCase() !== "admin") return rawRole;
 
-    const typeRaw = adminTask.toLowerCase();
 
+    const typeRaw = adminTask.toLowerCase();
     const typeMap = {
       processing: "Processing",
       validator: "Validator",
-      inspector: "Inspector"
+      inspector: "Inspector",
     };
-
     const type = typeMap[typeRaw] || "";
 
-    return type
-      ? `Admin - ${type} of E-Bike Registration`
-      : "Admin - E-Bike Registration";
+
+    return type ? `Admin - ${type} of E-Bike Registration` : "Admin - E-Bike Registration";
   };
+
 
   useEffect(() => {
     const auth = getAuth(app);
     const db = getFirestore(app);
+
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
           const usersRef = collection(db, "users");
 
-          // 1) Try doc with ID = uid
+
           const userDocRef = doc(usersRef, user.uid);
           const userDocSnap = await getDoc(userDocRef);
 
+
           let finalData = null;
           let finalDocId = null;
+
 
           if (userDocSnap.exists() && userDocSnap.data()) {
             finalData = userDocSnap.data();
             finalDocId = userDocSnap.id;
           }
 
-          // 2) If missing/no role, find by email and choose doc with role/adminTaskRole
+
           if (!finalData || (!finalData.role && !finalData.adminTaskRole)) {
             const q = query(usersRef, where("email", "==", user.email));
             const querySnapshot = await getDocs(q);
 
+
             if (!querySnapshot.empty) {
-              // PRIORITY: choose document that has adminTaskRole (best indicator of admin type)
-              const docWithAdminTaskRole = querySnapshot.docs.find(d => {
+              const docWithAdminTaskRole = querySnapshot.docs.find((d) => {
                 const dt = d.data() || {};
                 return !!dt.adminTaskRole;
               });
 
-              const docWithRole = querySnapshot.docs.find(d => !!(d.data() || {}).role);
+
+              const docWithRole = querySnapshot.docs.find((d) => !!(d.data() || {}).role);
               const chosenDoc = docWithAdminTaskRole || docWithRole || querySnapshot.docs[0];
+
 
               finalData = chosenDoc.data();
               finalDocId = chosenDoc.id;
             }
           }
 
+
           if (finalData) {
             const resolvedEmail = finalData.email || user.email || "No Email";
+
 
             setUserData({
               firstName: finalData.firstName || "",
@@ -120,16 +129,15 @@ export default function Me({ navigation }) {
               email: resolvedEmail,
               profileImage: finalData.profileImage || null,
               contactNumber: finalData.contactNumber || "",
-              address: finalData.address || ""
+              address: finalData.address || "",
             });
 
-            // role fallback: if adminTaskRole exists, treat as Admin
+
             const role = finalData.role || (finalData.adminTaskRole ? "Admin" : "Rider");
             setUserRole(role);
 
-            // label uses adminTaskRole
-            setUserRoleLabel(buildRoleLabel({ ...finalData, role }));
 
+            setUserRoleLabel(buildRoleLabel({ ...finalData, role }));
             setUserDocId(finalDocId || user.uid);
           } else {
             setUserData({
@@ -138,7 +146,7 @@ export default function Me({ navigation }) {
               email: user.email || "No Email",
               profileImage: null,
               contactNumber: "",
-              address: ""
+              address: "",
             });
             setUserRole("Rider");
             setUserRoleLabel("Rider");
@@ -159,12 +167,13 @@ export default function Me({ navigation }) {
       }
     });
 
+
     return () => unsubscribe();
   }, [navigation]);
 
-  const onEditProfile = () => {
-    setIsEditModalVisible(true);
-  };
+
+  const onEditProfile = () => setIsEditModalVisible(true);
+
 
   const onLogout = () => {
     const auth = getAuth(app);
@@ -173,25 +182,32 @@ export default function Me({ navigation }) {
       .catch((error) => Alert.alert("Logout Error", error.message));
   };
 
+
   const getFullName = () => {
     const fullName = `${userData.firstName || ""} ${userData.lastName || ""}`.trim();
     return fullName || "Rider";
   };
 
-  const handleUpdateUser = (updatedData) => {
-    setUserData(prev => ({ ...prev, ...updatedData }));
 
-    // update role too (supports role/adminTaskRole updates)
-    const role = updatedData.role || userRole || (updatedData.adminTaskRole ? "Admin" : "Rider");
+  const handleUpdateUser = (updatedData) => {
+    setUserData((prev) => ({ ...prev, ...updatedData }));
+
+
+    const role =
+      updatedData.role || userRole || (updatedData.adminTaskRole ? "Admin" : "Rider");
+
+
     if (updatedData.role) setUserRole(updatedData.role);
     else if (updatedData.adminTaskRole && userRole !== "Admin") setUserRole("Admin");
 
-    // rebuild label after update
+
     const merged = { ...userData, ...updatedData, role };
     setUserRoleLabel(buildRoleLabel(merged));
 
+
     setIsEditModalVisible(false);
   };
+
 
   if (loading) {
     return (
@@ -201,7 +217,9 @@ export default function Me({ navigation }) {
     );
   }
 
+
   const isRider = userRole === "Rider";
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -214,14 +232,21 @@ export default function Me({ navigation }) {
             </TouchableOpacity>
           </View>
 
+
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Profile</Text>
           </View>
 
+
           <View style={styles.headerSide} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.avatarWrap}>
             <Image
               source={userData.profileImage ? { uri: userData.profileImage } : DEFAULT_AVATAR}
@@ -230,12 +255,12 @@ export default function Me({ navigation }) {
             <Text style={styles.name}>{getFullName()}</Text>
             <Text style={styles.email}>{userData.email}</Text>
 
+
             {!!userRoleLabel && (
-              <Text style={[styles.roleTag, isRider && styles.riderTag]}>
-                {userRoleLabel}
-              </Text>
+              <Text style={[styles.roleTag, isRider && styles.riderTag]}>{userRoleLabel}</Text>
             )}
           </View>
+
 
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Account Details</Text>
@@ -249,8 +274,10 @@ export default function Me({ navigation }) {
             </View>
           </View>
 
+
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Account</Text>
+
 
             <TouchableOpacity
               onPress={onEditProfile}
@@ -261,23 +288,23 @@ export default function Me({ navigation }) {
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
+
             <TouchableOpacity onPress={() => setIsTermsModalVisible(true)} style={styles.row}>
               <Text style={styles.rowText}>Terms of Service</Text>
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
-
-
           </View>
+
 
           <View style={styles.card}>
             <Text style={styles.cardLabel}>App</Text>
+
 
             <TouchableOpacity onPress={() => setIsSettingsModalVisible(true)} style={styles.row}>
               <Text style={styles.rowText}>Settings</Text>
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
-            {/* Delete Account REMOVED for BOTH Rider and Admin */}
 
             <TouchableOpacity onPress={onLogout} style={[styles.row, styles.rowDanger]}>
               <Text style={[styles.rowText, styles.dangerText]}>Log Out</Text>
@@ -285,6 +312,7 @@ export default function Me({ navigation }) {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
 
         <EditProfileModal
           visible={isEditModalVisible}
@@ -295,10 +323,9 @@ export default function Me({ navigation }) {
           onUpdateUser={handleUpdateUser}
         />
 
-        <TermsService
-          visible={isTermsModalVisible}
-          onClose={() => setIsTermsModalVisible(false)}
-        />
+
+        <TermsService visible={isTermsModalVisible} onClose={() => setIsTermsModalVisible(false)} />
+
 
         <SettingsRider
           visible={isSettingsModalVisible}
@@ -310,21 +337,23 @@ export default function Me({ navigation }) {
   );
 }
 
+
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
   safeArea: {
     flex: 1,
-    backgroundColor: "#2e7d32"
+    backgroundColor: "#2e7d32",
   },
   container: {
     flex: 1,
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
+
 
   header: {
     flexDirection: "row",
@@ -334,64 +363,66 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     backgroundColor: "#2e7d32",
     borderBottomWidth: 1,
-    borderBottomColor: "#2e7d32"
+    borderBottomColor: "#2e7d32",
   },
   headerSide: {
     width: 80,
-    justifyContent: "center"
+    justifyContent: "center",
   },
   headerCenter: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 4,
-    paddingVertical: 4
+    paddingVertical: 4,
   },
   backArrow: {
     color: "#FFFFFF",
     fontSize: 16,
-    marginRight: 4
+    marginRight: 4,
   },
   backText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600"
+    fontWeight: "600",
   },
   headerTitle: {
     color: "#fff",
     fontSize: 20,
-    fontWeight: "700"
+    fontWeight: "700",
   },
+
 
   content: {
     padding: 16,
-    paddingBottom: 40
+    paddingBottom: 60,
   },
+
 
   avatarWrap: {
     alignItems: "center",
-    marginBottom: 18
+    marginBottom: 18,
   },
   avatar: {
     width: 110,
     height: 110,
     borderRadius: 55,
     borderWidth: 3,
-    borderColor: "#eee"
+    borderColor: "#eee",
   },
   name: {
     marginTop: 12,
     fontSize: 18,
     fontWeight: "700",
-    color: "#113e21"
+    color: "#113e21",
   },
   email: {
     marginTop: 4,
-    color: "#666"
+    color: "#666",
   },
   roleTag: {
     marginTop: 8,
@@ -402,25 +433,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     borderRadius: 12,
-    textAlign: "center"
+    textAlign: "center",
   },
   riderTag: {
-    backgroundColor: "#1565c0"
+    backgroundColor: "#1565c0",
   },
+
 
   card: {
     backgroundColor: "#fff",
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
-    elevation: 2
+    elevation: 2,
   },
   cardLabel: {
     fontWeight: "700",
     fontSize: 16,
     color: "#113e21",
-    marginBottom: 8
+    marginBottom: 8,
   },
+
 
   row: {
     flexDirection: "row",
@@ -428,21 +461,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0"
+    borderTopColor: "#f0f0f0",
   },
   rowText: {
     fontSize: 15,
-    color: "#333"
+    color: "#333",
   },
   chev: {
     fontSize: 18,
-    color: "#9e9e9e"
+    color: "#9e9e9e",
   },
 
+
   rowDanger: {
-    borderTopColor: "#f7dede"
+    borderTopColor: "rgb(247, 222, 222)",
   },
   dangerText: {
-    color: "#c21a1a"
-  }
+    color: "#c21a1a",
+  },
 });
+
+
+
