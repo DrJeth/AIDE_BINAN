@@ -266,7 +266,7 @@ export default function Me({ navigation }) {
               <Text style={styles.chev}>›</Text>
             </TouchableOpacity>
 
-            {/* Contact Us removed */}
+
           </View>
 
           <View style={styles.card}>

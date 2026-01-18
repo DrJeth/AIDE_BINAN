@@ -481,7 +481,7 @@ function RegisterRider({ navigation }) {
       messages.push("Please fill in Email");
     } else if (!validateEmail(emailVal)) {
       err.email = true;
-      // UPDATED message: not Gmail-only anymore
+      // UPDATED message:
       messages.push("Please enter a valid email address (e.g., name@yahoo.com)");
     }
 
@@ -755,7 +755,7 @@ function RegisterRider({ navigation }) {
       if (!emailSnapshot.empty) {
         Alert.alert(
           "Error",
-          "This email is already registered. Please use a different email or log in."
+          "You already have an account. Please log in instead."
         );
         setLoading(false);
         return;
