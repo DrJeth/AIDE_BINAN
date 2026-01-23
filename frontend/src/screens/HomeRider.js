@@ -29,8 +29,11 @@ import {
   orderBy,
   where,
   runTransaction,
-  updateDoc
+  updateDoc,
+  addDoc
 } from "firebase/firestore";
+import * as ImagePicker from "expo-image-picker";
+import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 // Static Assets
 const MenuIcon = require("../../assets/ic_menu.png");
@@ -45,25 +48,13 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /** UPDATED categories (support NEW + LEGACY values) */
 const EBIKE_CATEGORIES = [
-  // New (your admin side)
   { label: "CATEGORY L1A", value: "L1A" },
   { label: "CATEGORY L1B", value: "L1B" },
   { label: "CATEGORY L2A", value: "L2A" },
   { label: "CATEGORY L2B", value: "L2B" },
-
-  // Legacy fallback
-  { label: "Category L1 (e-Moped 2w)", value: "L1" },
-  { label: "Category L2 (e-Moped 3w)", value: "L2" },
-  { label: "Category L3 (e-Motorcycle)", value: "L3" },
-  { label: "Category L4 and L5 (e-Tricycle/e-Three Wheeled Vehicle)", value: "L4L5" },
-  { label: "Category L6 and L7 (e-Quad)", value: "L6L7" },
-  { label: "Category M1 (e-Car, 6-SUV)", value: "M1" },
-  { label: "Category M2 (e-Utility Vehicle, e-jeepney)", value: "M2" },
-  { label: "Category M3 (e-bus)", value: "M3" },
-  { label: "Category N1 (e-truck)", value: "N1" },
-  { label: "Category N2 (e-truck)", value: "N2" },
-  { label: "Category N3 (e-truck)", value: "N3" }
 ];
+
+const MAX_ADD_EBIKE_PHOTOS = 5;
 
 const toJSDate = (v) => {
   if (!v) return null;
@@ -119,6 +110,61 @@ const getCategoryLabel = (value) => {
   if (!value) return "N/A";
   const found = EBIKE_CATEGORIES.find((c) => c.value === value);
   return found ? found.label : value;
+};
+
+/* Payment Amount display should be only "Paid" or "Not Paid" */
+const normPayText = (v) => (v ?? "").toString().trim().toLowerCase();
+const getPaymentStatusText = (ebike, txs = []) => {
+  // collect possible paymentDetails sources (ebike + tx history fallback)
+  const candidates = [
+    ebike?.paymentDetails || null,
+    ...(Array.isArray(txs) ? txs.map((t) => t?.paymentDetails).filter(Boolean) : [])
+  ].filter(Boolean);
+
+  let statusStr = "";
+  let paidBool = null;
+  let hasVerifiedStamp = false;
+
+  for (const pd of candidates) {
+    // booleans (most reliable)
+    if (typeof pd?.isPaid === "boolean") paidBool = pd.isPaid;
+    if (typeof pd?.paid === "boolean") paidBool = pd.paid;
+    if (typeof pd?.verified === "boolean") paidBool = pd.verified;
+
+    // strings (common in your select: "Paid" / "Not Paid")
+    const s = pd?.paymentStatus ?? pd?.status ?? pd?.state ?? pd?.payment_state ?? "";
+    if (s) statusStr = String(s);
+
+    // timestamps (sometimes means verified/paid)
+    if (pd?.verifiedAt || pd?.paidAt || pd?.confirmedAt || pd?.approvedAt) {
+      hasVerifiedStamp = true;
+    }
+  }
+
+  const s = normPayText(statusStr);
+
+  // explicit NOT PAID check first (para di tamaan ng "paid" substring)
+  const isNotPaid =
+    paidBool === false ||
+    s === "not paid" ||
+    s.includes("not paid") ||
+    s.includes("not_paid") ||
+    s.includes("notpaid") ||
+    s.includes("unpaid") ||
+    (s.includes("not") && s.includes("paid"));
+
+  if (isNotPaid) return "Not Paid";
+
+  const isPaid =
+    paidBool === true ||
+    s === "paid" ||
+    (s.includes("paid") && !s.includes("not")) ||
+    hasVerifiedStamp;
+
+  if (isPaid) return "Paid";
+
+  // default (kung wala pa talagang info)
+  return "Not Paid";
 };
 
 /** Normalize ebikes (supports NEW schema + LEGACY single fields) */
@@ -211,16 +257,17 @@ const getEbikeTransactions = (ebike) => {
 };
 
 /* ===========================
-   ✅ REGISTRATION STEPPER HELPERS
-   Flow:
-   Processing → Validator → Inspector → Validator (Final) → Verified
+   REGISTRATION STEPPER HELPERS (FIXED)
+   UI Steps (3 lang dapat makita):
+   Pending → Inspect → Registered
+
+   Behavior:
+   - Pending Compliance stays on Inspect (hindi uusad; hindi magdodoble ng Inspect)
 =========================== */
 const REG_STEPS = [
-  { key: "processing", label: "Processing" },
-  { key: "validator", label: "Validator" },
-  { key: "inspector", label: "Inspector" },
-  { key: "validator_final", label: "Validator" },
-  { key: "verified", label: "Verified" }
+  { key: "pending", label: "Pending" },
+  { key: "inspect", label: "Inspect" },
+  { key: "registered", label: "Registered" }
 ];
 
 const normalizeStatusText = (v) => (v ?? "").toString().trim().toLowerCase();
@@ -237,54 +284,69 @@ const getRegistrationStepperInfo = (rawStatus) => {
     };
   }
 
-  if (s.includes("verified") || s.includes("approved") || s === "done") {
+  // Registered / Verified (final)
+  if (s.includes("registered") || s.includes("verified") || s.includes("approved") || s === "done") {
     return {
-      index: 4,
+      index: 2, // last step (Registered)
       mode: "done",
-      statusLabel: "Verified",
-      nextText: "Registration verified ✅"
+      statusLabel: "Registered",
+      nextText: "Registration complete ✅"
     };
   }
 
-  if (s.includes("inspection") || s.includes("inspector") || s.includes("for inspection")) {
-    return {
-      index: 2,
-      mode: "active",
-      statusLabel: "For Inspection",
-      nextText: "Waiting for Inspector to check your e-bike."
-    };
-  }
-
+  // Pending Compliance (failed sa inspect) — tracker stays on Inspect
   if (
-    s.includes("inspector to validator") ||
+    s.includes("pending compliance") ||
+    (s.includes("compliance") && !s.includes("complied")) ||
     s.includes("for final") ||
     s.includes("final validation") ||
     s.includes("for verification") ||
-    s.includes("back to validator")
+    s.includes("back to validator") ||
+    s.includes("inspector to validator")
   ) {
     return {
-      index: 3,
+      index: 1, //stay on Inspect (NOT another step)
       mode: "active",
-      statusLabel: "For Final Validation",
-      nextText: "Waiting for Validator to finalize verification."
+      statusLabel: "Inspect",
+      nextText: "You have failed the inspection. Please comply and resubmit for checking."
     };
   }
 
-  if (s.includes("validation") || s.includes("validator") || s.includes("for validation")) {
+  // Inspect stage
+  if (s.includes("inspect") || s.includes("inspection") || s.includes("for inspection")) {
     return {
       index: 1,
       mode: "active",
-      statusLabel: "For Validation",
-      nextText: "Waiting for Validator to review your registration."
+      statusLabel: "Inspect",
+      nextText: "Waiting for inspection/checking of your e-bike."
     };
   }
 
+  // Pending (default)
   return {
     index: 0,
     mode: "active",
-    statusLabel: "Processing",
-    nextText: "Waiting for Processing Admin to review and forward your registration."
+    statusLabel: "Pending",
+    nextText: "Your registration is pending."
   };
+};
+
+/** docType helpers (for HomeRider sections) */
+const normDocType = (v) => (v ?? "").toString().trim().toLowerCase();
+const isGovIdDoc = (d) => {
+  const t = normDocType(d?.docType);
+  if (!t) return false;
+  return t.includes("gov") || t.includes("gov_id") || t.includes("id") || t.includes("license") || t.includes("driver");
+};
+const isEbikePhotoDoc = (d) => {
+  const t = normDocType(d?.docType);
+  if (!t) return false;
+  // supports: ebike_photo, ebikePhotos, ebike, e-bike photo, bike photo
+  if (t.includes("ebike")) return true;
+  if (t.includes("e-bike")) return true;
+  if (t.includes("bike") && t.includes("photo")) return true;
+  if (t.includes("ebike") && t.includes("photo")) return true;
+  return false;
 };
 
 export default function HomeRider({ navigation }) {
@@ -305,13 +367,19 @@ export default function HomeRider({ navigation }) {
   const [addEbikeVisible, setAddEbikeVisible] = useState(false);
   const [addEbikeLoading, setAddEbikeLoading] = useState(false);
   const [addNoPlateNumber, setAddNoPlateNumber] = useState(false);
+  const [addCategoryVisible, setAddCategoryVisible] = useState(false);
+
+  // photos state for Add New E-bike
+  const [addEbikePhotos, setAddEbikePhotos] = useState([]); // [{ id, uri }]
+
   const [addEbikeForm, setAddEbikeForm] = useState({
     ebikeBrand: "",
     ebikeModel: "",
     ebikeColor: "",
     chassisMotorNumber: "",
     branch: "",
-    plateNumber: ""
+    plateNumber: "",
+    ebikeCategorySelected: "" // ✅ NEW
   });
 
   const [newsUpdates, setNewsUpdates] = useState([
@@ -370,9 +438,11 @@ export default function HomeRider({ navigation }) {
 
   const auth = getAuth();
   const db = getFirestore();
+  const storage = getStorage();
 
   const toUpper = (v) => (v ?? "").toString().toUpperCase();
   const makeEbikeId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const makePhotoId = () => `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
   const resetAddEbikeForm = () => {
     setAddEbikeForm({
@@ -381,9 +451,12 @@ export default function HomeRider({ navigation }) {
       ebikeColor: "",
       chassisMotorNumber: "",
       branch: "",
-      plateNumber: ""
+      plateNumber: "",
+      ebikeCategorySelected: ""
     });
+    setAddEbikePhotos([]); 
     setAddNoPlateNumber(false);
+    setAddCategoryVisible(false);
   };
 
   const validateChassisMotorNumber = (number) => {
@@ -402,6 +475,78 @@ export default function HomeRider({ navigation }) {
     return plateRegex.test(plateNumber.trim().toUpperCase());
   };
 
+  // upload helper
+  const uploadUriToStorage = async (uri, storagePath) => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+
+    return await new Promise((resolve, reject) => {
+      const r = sRef(storage, storagePath);
+      const task = uploadBytesResumable(r, blob);
+
+      task.on(
+        "state_changed",
+        () => {},
+        (err) => reject(err),
+        async () => {
+          try {
+            const url = await getDownloadURL(task.snapshot.ref);
+            resolve(url);
+          } catch (e) {
+            reject(e);
+          }
+        }
+      );
+    });
+  };
+
+  // picker for Add New E-bike photos
+  const pickAddEbikePhotos = async () => {
+    try {
+      if (addEbikeLoading) return;
+
+      if (addEbikePhotos.length >= MAX_ADD_EBIKE_PHOTOS) {
+        Alert.alert("Limit Reached", `You can upload up to ${MAX_ADD_EBIKE_PHOTOS} photos only.`);
+        return;
+      }
+
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm?.granted) {
+        Alert.alert("Permission Needed", "Please allow photo library access to upload e-bike photos.");
+        return;
+      }
+
+      const remaining = MAX_ADD_EBIKE_PHOTOS - addEbikePhotos.length;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining // iOS only; Android may ignore (still ok)
+      });
+
+      if (result?.canceled) return;
+
+      const assets = Array.isArray(result?.assets) ? result.assets : [];
+      const picked = assets
+        .map((a) => a?.uri)
+        .filter(Boolean)
+        .slice(0, remaining)
+        .map((uri) => ({ id: makePhotoId(), uri }));
+
+      if (picked.length === 0) return;
+
+      setAddEbikePhotos((prev) => [...prev, ...picked]);
+    } catch (e) {
+      console.error("pickAddEbikePhotos error:", e);
+      Alert.alert("Failed", "Could not pick photo. Please try again.");
+    }
+  };
+
+  const removeAddEbikePhoto = (photoId) => {
+    setAddEbikePhotos((prev) => prev.filter((p) => String(p.id) !== String(photoId)));
+  };
+
   const validateAddEbikeEntry = () => {
     if (!addEbikeForm.ebikeBrand.trim()) {
       Alert.alert("Error", "Please fill in E-Bike Brand");
@@ -415,6 +560,13 @@ export default function HomeRider({ navigation }) {
       Alert.alert("Error", "Please fill in E-Bike Color");
       return false;
     }
+
+    // category required
+    if (!addEbikeForm.ebikeCategorySelected) {
+      Alert.alert("Error", "Please select E-Bike Category");
+      return false;
+    }
+
     if (!validateChassisMotorNumber(addEbikeForm.chassisMotorNumber)) {
       Alert.alert(
         "Error",
@@ -422,6 +574,13 @@ export default function HomeRider({ navigation }) {
       );
       return false;
     }
+
+    // at least 1 photo
+    if (!Array.isArray(addEbikePhotos) || addEbikePhotos.length === 0) {
+      Alert.alert("Error", "Please upload at least 1 E-Bike photo");
+      return false;
+    }
+
     if (!addNoPlateNumber) {
       if (!addEbikeForm.plateNumber.trim()) {
         Alert.alert("Error", "Please fill in Plate Number");
@@ -449,6 +608,12 @@ export default function HomeRider({ navigation }) {
         return;
       }
       if (!validateAddEbikeEntry()) return;
+
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        Alert.alert("Error", "No active session found. Please login again.");
+        return;
+      }
 
       const plate = addNoPlateNumber ? null : addEbikeForm.plateNumber.trim().toUpperCase();
 
@@ -485,8 +650,10 @@ export default function HomeRider({ navigation }) {
         }
       }
 
+      const newEbikeId = makeEbikeId();
+
       const newItem = {
-        id: makeEbikeId(),
+        id: newEbikeId,
         ebikeBrand: addEbikeForm.ebikeBrand.trim().toUpperCase(),
         ebikeModel: addEbikeForm.ebikeModel.trim().toUpperCase(),
         ebikeColor: addEbikeForm.ebikeColor.trim().toUpperCase(),
@@ -499,7 +666,7 @@ export default function HomeRider({ navigation }) {
         hasPlate: !addNoPlateNumber,
 
         status: "Pending",
-        ebikeCategorySelected: "",
+        ebikeCategorySelected: addEbikeForm.ebikeCategorySelected || "", // ✅ NEW
         registeredDate: null,
         renewalDate: null,
         registrationStatus: null,
@@ -514,6 +681,7 @@ export default function HomeRider({ navigation }) {
 
       const userRef = doc(db, "users", userDocId);
 
+      // 1) Save new ebike into user doc
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(userRef);
         if (!snap.exists()) throw new Error("User document not found.");
@@ -541,6 +709,36 @@ export default function HomeRider({ navigation }) {
           status: overallStatus
         });
       });
+
+      // 2) Upload e-bike photos + save to riderRegistrations/{uid}/images with docType=ebike_photo
+      try {
+        const imagesCol = collection(db, "riderRegistrations", uid, "images");
+
+        for (let i = 0; i < addEbikePhotos.length; i++) {
+          const p = addEbikePhotos[i];
+          if (!p?.uri) continue;
+
+          const storagePath = `riderRegistrations/${uid}/ebikePhotos/${newEbikeId}/${p.id}.jpg`;
+          const url = await uploadUriToStorage(p.uri, storagePath);
+
+          await addDoc(imagesCol, {
+            url,
+            type: "original",
+            docType: "ebike_photo",
+            ebikeId: newEbikeId,
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        // refresh local docs (so it shows agad)
+        await loadRiderDocuments(uid);
+      } catch (photoErr) {
+        console.error("E-bike photo upload error:", photoErr);
+        Alert.alert(
+          "Saved (Photos failed)",
+          "Your new e-bike was saved, but uploading photos failed. Please try again."
+        );
+      }
 
       // update local state
       setUserData((prev) => {
@@ -600,18 +798,31 @@ export default function HomeRider({ navigation }) {
   </html>
   `;
 
+  /** include docType + ebikeId so we can route docs to proper sections */
   const loadRiderDocuments = async (docId) => {
     try {
       setDocsLoading(true);
       const imagesRef = collection(db, "riderRegistrations", docId, "images");
       const docsSnap = await getDocs(imagesRef);
       const docs = docsSnap.docs.map((d) => {
-        const data = d.data();
+        const data = d.data() || {};
         const url = data.url || data.imageUrl || data.downloadUrl || data.downloadURL || data.image;
+        const docType =
+          data.docType ||
+          data.doc_type ||
+          data.documentType ||
+          data.kind ||
+          data.category ||
+          null;
+
+        const ebikeId = data.ebikeId || data.ebike_id || data.ebikeID || null;
+
         return {
           id: d.id,
           url,
-          type: data.type || "original"
+          type: data.type || "original",
+          docType,
+          ebikeId
         };
       });
       setRiderDocs(docs);
@@ -896,7 +1107,9 @@ export default function HomeRider({ navigation }) {
             }
           }
 
-          await loadRiderDocuments(foundDocId);
+          /** riderRegistrations doc is keyed by UID (so use uid first) */
+          await loadRiderDocuments(currentUser.uid || foundDocId);
+
           await refreshAppointmentNotifs(currentUser.uid, foundDocId);
         }
       } catch (error) {
@@ -978,7 +1191,7 @@ export default function HomeRider({ navigation }) {
     return `E-bike ${idx + 1}: ${plate}${brand}`;
   };
 
-  /* ✅ Render Stepper (used in E-bike Details modal + NOW also in Home above buttons) */
+  /* Render Stepper (used in E-bike Details modal + NOW also in Home above buttons) */
   const renderRegistrationStepper = (statusValue) => {
     const info = getRegistrationStepperInfo(statusValue);
     const currentIndex = info.index;
@@ -1130,6 +1343,52 @@ export default function HomeRider({ navigation }) {
     );
   };
 
+  // Category Picker for Add New E-bike
+  const renderAddCategoryPickerModal = () => {
+    return (
+      <Modal
+        visible={addCategoryVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddCategoryVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerCard}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setAddCategoryVisible(false)}
+            >
+              <Text style={styles.modalCloseText}>✕</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.modalTitle, { marginBottom: 10 }]}>Select E-Bike Category</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled>
+              {EBIKE_CATEGORIES.map((c) => {
+                const isSel = String(addEbikeForm.ebikeCategorySelected) === String(c.value);
+                return (
+                  <TouchableOpacity
+                    key={c.value}
+                    style={[styles.pickerItem, isSel && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setAddEbikeForm((p) => ({ ...p, ebikeCategorySelected: c.value }));
+                      setAddCategoryVisible(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSel && styles.pickerItemTextSelected]}>
+                      {c.label}
+                    </Text>
+                    {isSel ? <Text style={styles.checkMark}>✓</Text> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const renderAddEbikeModal = () => {
     return (
       <Modal
@@ -1213,6 +1472,32 @@ export default function HomeRider({ navigation }) {
                   />
                 </View>
 
+                {/* Category select (same like signup) */}
+                <Text style={styles.inputLabel}>E-Bike Category</Text>
+                <TouchableOpacity
+                  style={styles.selectField}
+                  onPress={() => {
+                    if (addEbikeLoading) return;
+                    setAddCategoryVisible(true);
+                  }}
+                  activeOpacity={0.9}
+                  disabled={addEbikeLoading}
+                >
+                  <Text
+                    style={[
+                      styles.selectFieldText,
+                      !addEbikeForm.ebikeCategorySelected && { color: "#999" }
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {addEbikeForm.ebikeCategorySelected
+                      ? getCategoryLabel(addEbikeForm.ebikeCategorySelected)
+                      : "Select E-Bike Category"}
+                  </Text>
+                  <Text style={styles.selectFieldChevron}>⌄</Text>
+                </TouchableOpacity>
+                <Text style={styles.helpSmall}>Select category (same as sign up).</Text>
+
                 <Text style={styles.inputLabel}>Chassis / Motor Number</Text>
                 <View style={styles.inputBox}>
                   <TextInput
@@ -1281,6 +1566,53 @@ export default function HomeRider({ navigation }) {
                   </Text>
                 </View>
 
+                {/*Upload E-bike Photos */}
+                <Text style={styles.inputLabel}>Upload E-Bike Photos</Text>
+                <Text style={styles.auditHint}>
+                  Upload clear photos (front/side). Max {MAX_ADD_EBIKE_PHOTOS} photos.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.photoPickBtn, addEbikeLoading && styles.btnDisabled]}
+                  onPress={pickAddEbikePhotos}
+                  disabled={addEbikeLoading}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.photoPickBtnText}>
+                    {addEbikePhotos.length > 0 ? "+ Add Photo" : "Select Photos"}
+                  </Text>
+                </TouchableOpacity>
+
+                {addEbikePhotos.length === 0 ? (
+                  <Text style={styles.emptyDocsText}>No photos selected.</Text>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginTop: 8, marginBottom: 6 }}
+                    nestedScrollEnabled
+                  >
+                    {addEbikePhotos.map((p) => (
+                      <View key={p.id} style={styles.photoThumbWrap}>
+                        <TouchableOpacity
+                          onPress={() => openImageViewer(p.uri, "Selected E-Bike Photo")}
+                          activeOpacity={0.9}
+                        >
+                          <Image source={{ uri: p.uri }} style={styles.photoThumb} resizeMode="cover" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoRemoveBtn}
+                          onPress={() => removeAddEbikePhoto(p.id)}
+                          disabled={addEbikeLoading}
+                        >
+                          <Text style={styles.photoRemoveText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+
                 <TouchableOpacity
                   style={[styles.addSubmitBtn, addEbikeLoading && styles.btnDisabled]}
                   onPress={submitAddNewEbike}
@@ -1321,6 +1653,9 @@ export default function HomeRider({ navigation }) {
 
     const txs = selectedEbike ? getEbikeTransactions(selectedEbike) : [];
 
+    // NEW: Payment Amount row will show only Paid / Not Paid
+    const paymentStatusText = getPaymentStatusText(selectedEbike, txs);
+
     const allReceipt = Array.from(
       new Set(
         txs
@@ -1349,6 +1684,29 @@ export default function HomeRider({ navigation }) {
       ? userData.adminVerificationImages
       : [];
 
+    /** route riderDocs into correct sections */
+    const riderGovIdDocs = (riderDocs || []).filter(isGovIdDoc);
+    const riderGovIdUrls = Array.from(new Set(riderGovIdDocs.map((d) => d?.url).filter(Boolean)));
+
+    // filter ebike photos by selected ebikeId when present
+    const riderSignupEbikeDocs = (riderDocs || []).filter((d) => {
+      if (!isEbikePhotoDoc(d)) return false;
+      if (!d?.ebikeId) return true; // legacy / signup
+      return String(d.ebikeId) === String(selectedEbike?.id);
+    });
+
+    const riderSignupEbikeUrls = Array.from(
+      new Set(riderSignupEbikeDocs.map((d) => d?.url).filter(Boolean))
+    );
+
+    // combine signup ebike photos + admin/transaction ebike photos
+    const mergedEbikePhotos = Array.from(
+      new Set([...(riderSignupEbikeUrls || []), ...(allEbike || [])])
+    ).filter(Boolean);
+
+    // everything else should stay in "Rider Uploaded Documents"
+    const riderOtherDocs = (riderDocs || []).filter((d) => !isGovIdDoc(d) && !isEbikePhotoDoc(d));
+
     return (
       <Modal
         visible={detailsVisible}
@@ -1365,7 +1723,6 @@ export default function HomeRider({ navigation }) {
               <Text style={styles.modalCloseText}>✕</Text>
             </TouchableOpacity>
 
-            {/* ✅ SCROLL FIX: add style flex:1 + nestedScrollEnabled */}
             <ScrollView
               style={styles.detailsScroll}
               contentContainerStyle={styles.detailsScrollContent}
@@ -1375,7 +1732,6 @@ export default function HomeRider({ navigation }) {
             >
               <Text style={styles.modalTitle}>E-bike Details</Text>
 
-              {/* ✅ Stepper guide (TOP of E-bike Details) */}
               {renderRegistrationStepper(selectedEbike?.status || userData?.status || "Pending")}
 
               {ebikes.length > 1 && (
@@ -1437,7 +1793,9 @@ export default function HomeRider({ navigation }) {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Plate Number</Text>
                   <Text style={styles.detailValue}>
-                    {selectedEbike?.plateNumber ? String(selectedEbike.plateNumber).toUpperCase() : "N/A"}
+                    {selectedEbike?.plateNumber
+                      ? String(selectedEbike.plateNumber).toUpperCase()
+                      : "N/A"}
                   </Text>
                 </View>
                 <View style={styles.detailRow}>
@@ -1454,7 +1812,9 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Chassis/Motor No.</Text>
-                  <Text style={styles.detailValue}>{selectedEbike?.chassisMotorNumber || "N/A"}</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedEbike?.chassisMotorNumber || "N/A"}
+                  </Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Branch</Text>
@@ -1472,7 +1832,9 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>E-bike Status</Text>
-                  <Text style={styles.detailValue}>{selectedEbike?.status || userData.status || "Pending"}</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedEbike?.status || userData.status || "Pending"}
+                  </Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Registration Status</Text>
@@ -1480,7 +1842,9 @@ export default function HomeRider({ navigation }) {
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Category</Text>
-                  <Text style={styles.detailValue}>{getCategoryLabel(selectedEbike?.ebikeCategorySelected)}</Text>
+                  <Text style={styles.detailValue}>
+                    {getCategoryLabel(selectedEbike?.ebikeCategorySelected)}
+                  </Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Registered Date</Text>
@@ -1490,9 +1854,11 @@ export default function HomeRider({ navigation }) {
                   <Text style={styles.detailLabel}>Renewal Date</Text>
                   <Text style={styles.detailValue}>{formatDate(selectedEbike?.renewalDate)}</Text>
                 </View>
+
+                {/* ✅ CHANGED: Payment Amount now shows Paid / Not Paid only */}
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Payment Amount</Text>
-                  <Text style={styles.detailValue}>₱{selectedEbike?.paymentDetails?.amount?.toFixed?.(2) || "0.00"}</Text>
+                  <Text style={styles.detailValue}>{paymentStatusText}</Text>
                 </View>
               </View>
 
@@ -1508,17 +1874,42 @@ export default function HomeRider({ navigation }) {
                 ) : null}
 
                 {!docsLoading &&
-                  riderDocs.length === 0 &&
+                  riderGovIdUrls.length === 0 &&
+                  mergedEbikePhotos.length === 0 &&
+                  riderOtherDocs.length === 0 &&
                   legacyAdminImgs.length === 0 &&
-                  allReceipt.length === 0 &&
-                  allEbike.length === 0 && (
+                  allReceipt.length === 0 && (
                     <Text style={styles.emptyDocsText}>No uploaded documents found.</Text>
                   )}
 
                 {!docsLoading && (
                   <>
-                    <Text style={[styles.sectionTitle, { marginTop: 6 }]}>Photo of the Receipt</Text>
-                    <Text style={styles.auditHint}>New and old photo</Text>
+                    {/* ✅ NEW: Rider Uploaded ID */}
+                    <Text style={[styles.sectionTitle, { marginTop: 6 }]}>Rider Uploaded ID</Text>
+                    <Text style={styles.auditHint}>Government Valid ID / Driver’s License</Text>
+
+                    {riderGovIdUrls.length === 0 ? (
+                      <Text style={styles.emptyDocsText}>No ID uploaded.</Text>
+                    ) : (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.docsScroll}
+                        nestedScrollEnabled
+                      >
+                        {riderGovIdUrls.map((url, idx) => (
+                          <TouchableOpacity
+                            key={`gid_${idx}`}
+                            onPress={() => openImageViewer(url, "Rider Uploaded ID")}
+                          >
+                            <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
+
+                    {/* Receipt */}
+                    <Text style={[styles.sectionTitle, { marginTop: 10 }]}>Photo of the Receipt</Text>
 
                     {allReceipt.length === 0 ? (
                       <Text style={styles.emptyDocsText}>No receipt photos.</Text>
@@ -1530,17 +1921,20 @@ export default function HomeRider({ navigation }) {
                         nestedScrollEnabled
                       >
                         {allReceipt.map((url, idx) => (
-                          <TouchableOpacity key={`all_r_${idx}`} onPress={() => openImageViewer(url, "Receipt Photo")}>
+                          <TouchableOpacity
+                            key={`all_r_${idx}`}
+                            onPress={() => openImageViewer(url, "Receipt Photo")}
+                          >
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           </TouchableOpacity>
                         ))}
                       </ScrollView>
                     )}
 
+                    {/* E-bike photo now includes SIGNUP photos + admin photos */}
                     <Text style={[styles.sectionTitle, { marginTop: 10 }]}>E-Bike Photo</Text>
-                    <Text style={styles.auditHint}>New and old photo</Text>
 
-                    {allEbike.length === 0 ? (
+                    {mergedEbikePhotos.length === 0 ? (
                       <Text style={styles.emptyDocsText}>No e-bike photos.</Text>
                     ) : (
                       <ScrollView
@@ -1549,8 +1943,11 @@ export default function HomeRider({ navigation }) {
                         style={styles.docsScroll}
                         nestedScrollEnabled
                       >
-                        {allEbike.map((url, idx) => (
-                          <TouchableOpacity key={`all_e_${idx}`} onPress={() => openImageViewer(url, "E-Bike Photo")}>
+                        {mergedEbikePhotos.map((url, idx) => (
+                          <TouchableOpacity
+                            key={`all_e_${idx}`}
+                            onPress={() => openImageViewer(url, "E-Bike Photo")}
+                          >
                             <Image source={{ uri: url }} style={styles.docThumb} resizeMode="cover" />
                           </TouchableOpacity>
                         ))}
@@ -1559,7 +1956,8 @@ export default function HomeRider({ navigation }) {
                   </>
                 )}
 
-                {!docsLoading && riderDocs.length > 0 && (
+                {/* Rider Uploaded Documents = EXCLUDE gov id + signup ebike photos */}
+                {!docsLoading && riderOtherDocs.length > 0 && (
                   <>
                     <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
                       Rider Uploaded Documents
@@ -1570,31 +1968,38 @@ export default function HomeRider({ navigation }) {
                       style={styles.docsScroll}
                       nestedScrollEnabled
                     >
-                      {riderDocs.map((d) => (
-                        <TouchableOpacity
-                          key={d.id}
-                          style={styles.docThumbContainer}
-                          onPress={() => d.url && openImageViewer(d.url, "Rider Uploaded Document")}
-                        >
-                          {d.url ? (
-                            <Image source={{ uri: d.url }} style={styles.docThumb} resizeMode="cover" />
-                          ) : (
-                            <View style={[styles.docThumb, styles.docThumbPlaceholder]}>
-                              <Text style={styles.docThumbPlaceholderText}>No Image</Text>
+                      {riderOtherDocs.map((d) => {
+                        const badge =
+                          isGovIdDoc(d) ? "🪪" : isEbikePhotoDoc(d) ? "🚲" : d.type === "original" ? "📝" : "✅";
+
+                        return (
+                          <TouchableOpacity
+                            key={d.id}
+                            style={styles.docThumbContainer}
+                            onPress={() => d.url && openImageViewer(d.url, "Rider Uploaded Document")}
+                          >
+                            {d.url ? (
+                              <Image source={{ uri: d.url }} style={styles.docThumb} resizeMode="cover" />
+                            ) : (
+                              <View style={[styles.docThumb, styles.docThumbPlaceholder]}>
+                                <Text style={styles.docThumbPlaceholderText}>No Image</Text>
+                              </View>
+                            )}
+                            <View style={styles.docTypeBadge}>
+                              <Text style={styles.docTypeBadgeText}>{badge}</Text>
                             </View>
-                          )}
-                          <View style={styles.docTypeBadge}>
-                            <Text style={styles.docTypeBadgeText}>{d.type === "original" ? "📝" : "✅"}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   </>
                 )}
 
                 {!docsLoading && legacyAdminImgs.length > 0 && (
                   <>
-                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Admin Verification (Legacy)</Text>
+                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
+                      Admin Verification (Legacy)
+                    </Text>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
@@ -1618,93 +2023,21 @@ export default function HomeRider({ navigation }) {
                 )}
               </View>
 
-              {/* Transaction History */}
-              <View style={styles.detailSection}>
-                <Text style={styles.sectionTitle}>Transaction History</Text>
-                <Text style={styles.auditHint}>Latest → Oldest</Text>
-
-                {txs.length === 0 ? (
-                  <Text style={styles.emptyDocsText}>No transactions recorded yet.</Text>
-                ) : (
-                  txs.map((tx, idx) => {
-                    const rec = Array.isArray(tx?.adminVerificationDocs?.receipt) ? tx.adminVerificationDocs.receipt : [];
-                    const ebp = Array.isArray(tx?.adminVerificationDocs?.ebikePhotos) ? tx.adminVerificationDocs.ebikePhotos : [];
-                    const amt = Number(tx?.paymentDetails?.amount || 0);
-
-                    return (
-                      <View key={`${idx}_${String(tx?.createdAt || "")}`} style={styles.auditCard}>
-                        <View style={styles.auditHeaderRow}>
-                          <Text style={styles.auditTitle}>
-                            {idx === 0 ? "Latest" : `#${idx + 1}`} • {tx?.type || "Transaction"}
-                          </Text>
-                          <Text style={styles.auditDate}>
-                            {formatDate(tx?.createdAt || tx?.paymentDetails?.verifiedAt)}
-                          </Text>
-                        </View>
-
-                        <View style={styles.auditRow}>
-                          <Text style={styles.auditLabel}>Registered:</Text>
-                          <Text style={styles.auditValue}>{formatDate(tx?.registeredDate)}</Text>
-                        </View>
-
-                        <View style={styles.auditRow}>
-                          <Text style={styles.auditLabel}>Renewal:</Text>
-                          <Text style={styles.auditValue}>{formatDate(tx?.renewalDate)}</Text>
-                        </View>
-
-                        <View style={styles.auditRow}>
-                          <Text style={styles.auditLabel}>Payment:</Text>
-                          <Text style={styles.auditValue}>₱{amt.toFixed(2)}</Text>
-                        </View>
-
-                        {rec.length > 0 && (
-                          <>
-                            <Text style={styles.auditSubTitle}>Photo of the Receipt</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
-                              {rec.map((url, i) => (
-                                <TouchableOpacity
-                                  key={`r_${idx}_${i}`}
-                                  onPress={() => openImageViewer(url, "Receipt Photo")}
-                                >
-                                  <Image source={{ uri: url }} style={styles.auditThumb} />
-                                </TouchableOpacity>
-                              ))}
-                            </ScrollView>
-                          </>
-                        )}
-
-                        {ebp.length > 0 && (
-                          <>
-                            <Text style={styles.auditSubTitle}>E-bike Photo</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
-                              {ebp.map((url, i) => (
-                                <TouchableOpacity
-                                  key={`e_${idx}_${i}`}
-                                  onPress={() => openImageViewer(url, "E-Bike Photo")}
-                                >
-                                  <Image source={{ uri: url }} style={styles.auditThumb} />
-                                </TouchableOpacity>
-                              ))}
-                            </ScrollView>
-                          </>
-                        )}
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-
-              {/* Add New E-bike button */}
-              <TouchableOpacity
-                style={styles.addNewEbikeBtn}
-                onPress={() => {
-                  resetAddEbikeForm();
-                  setAddEbikeVisible(true);
-                }}
-              >
-                <Text style={styles.addNewEbikeBtnText}>+ Add New E-Bike</Text>
-              </TouchableOpacity>
+              {/* Transaction History REMOVED as requested */}
+              {/* NOTE: Tinanggal ko yung old Add New button dito (inside ScrollView) */}
             </ScrollView>
+
+            {/* STICKY Add New E-bike button (always visible) */}
+            <TouchableOpacity
+              style={styles.addNewEbikeStickyBtn}
+              onPress={() => {
+                resetAddEbikeForm();
+                setAddEbikeVisible(true);
+              }}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.addNewEbikeBtnText}>+ Add New E-Bike</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1860,7 +2193,7 @@ export default function HomeRider({ navigation }) {
           <Text style={styles.subtitleText}>Your journey starts here</Text>
         </View>
 
-        {/* ✅ TRACKER STEP-BY-STEP ABOVE THE TWO BUTTONS */}
+        {/*TRACKER STEP-BY-STEP ABOVE THE TWO BUTTONS */}
         <View style={styles.homeStepperContainer}>
           {renderRegistrationStepper(selectedEbike?.status || userData?.status || "Pending")}
         </View>
@@ -1871,7 +2204,7 @@ export default function HomeRider({ navigation }) {
             <Text style={styles.quickActionText}>E-bike Details</Text>
           </TouchableOpacity>
 
-          {/* ✅ NO CHANGE: Ordinance screen NOT modified (as you requested) */}
+          {/* Ordinance screen NOT modified (as you requested) */}
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate("Ordinance")}
@@ -1932,6 +2265,7 @@ export default function HomeRider({ navigation }) {
 
       {renderDetailsModal()}
       {renderEbikePickerModal()}
+      {renderAddCategoryPickerModal()}
       {renderNotificationsModal()}
       {renderAddEbikeModal()}
       {renderImageViewerModal()}
@@ -1975,7 +2309,7 @@ const styles = StyleSheet.create({
   welcomeText: { fontSize: 22, fontWeight: "600", color: "#2E7D32" },
   subtitleText: { color: "gray", marginTop: 5 },
 
-  /* ✅ NEW: spacing for stepper above buttons */
+  /* spacing for stepper above buttons */
   homeStepperContainer: {
     paddingHorizontal: 20,
     marginTop: 2,
@@ -2056,7 +2390,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingTop: 40,
     paddingHorizontal: 16,
-    paddingBottom: 12 // ✅ helps last content not feel cut
+    paddingBottom: 12
   },
   notifCard: {
     width: "90%",
@@ -2096,13 +2430,13 @@ const styles = StyleSheet.create({
   modalScrollContent: { paddingBottom: 24 },
   modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 16, color: "#2E7D32" },
 
-  /* ✅ NEW: E-bike Details Scroll fix styles */
+  /* E-bike Details Scroll fix styles */
   detailsScroll: {
     flex: 1,
     width: "100%"
   },
   detailsScrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 120, // extra space para di matakpan ng sticky button
     flexGrow: 1
   },
 
@@ -2167,27 +2501,6 @@ const styles = StyleSheet.create({
   notifDate: { fontSize: 11, color: "#888", textAlign: "right" },
 
   auditHint: { fontSize: 12, color: "#7F8C8D", marginBottom: 10 },
-  auditCard: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EAEAEA",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12
-  },
-  auditHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10
-  },
-  auditTitle: { fontSize: 13, fontWeight: "800", color: "#2C3E50" },
-  auditDate: { fontSize: 12, color: "#7F8C8D" },
-  auditRow: { flexDirection: "row", marginBottom: 6 },
-  auditLabel: { width: "38%", color: "#7F8C8D", fontWeight: "700", fontSize: 12 },
-  auditValue: { width: "62%", color: "#2C3E50", fontSize: 12 },
-  auditSubTitle: { marginTop: 10, marginBottom: 8, fontSize: 12, fontWeight: "800", color: "#2C3E50" },
-  auditThumb: { width: 80, height: 80, borderRadius: 10, marginRight: 10, marginBottom: 6 },
 
   pickerItem: {
     paddingVertical: 12,
@@ -2200,7 +2513,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   pickerItemSelected: { borderColor: "#2E7D32", backgroundColor: "#E6F3EC" },
-  pickerItemText: { fontSize: 14, fontWeight: "700", color: "#2C3E50" },
+  pickerItemText: { fontSize: 14, fontWeight: "700", color: "#2C3E50", flex: 1 },
   pickerItemTextSelected: { color: "#2E7D32" },
   pickerSubText: { marginTop: 4, fontSize: 12, fontWeight: "700" },
   checkMark: { fontSize: 18, fontWeight: "900", color: "#2E7D32", marginLeft: 10 },
@@ -2217,6 +2530,21 @@ const styles = StyleSheet.create({
   },
   addNewEbikeBtnText: { color: "#2E7D32", fontWeight: "800" },
 
+  // Sticky button style
+  addNewEbikeStickyBtn: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 12,
+    backgroundColor: "#E6F3EC",
+    borderWidth: 1,
+    borderColor: "#2E7D32",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    zIndex: 60
+  },
+
   inputLabel: { fontSize: 13, fontWeight: "800", color: "#2C3E50", marginBottom: 6 },
   inputBox: {
     backgroundColor: "#F5F5F5",
@@ -2229,6 +2557,22 @@ const styles = StyleSheet.create({
   },
   inputText: { fontSize: 14, color: "#000" },
   helpSmall: { marginTop: -6, marginBottom: 12, fontSize: 12, color: "#777", fontStyle: "italic" },
+
+  // NEW: Category select field style
+  selectField: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12
+  },
+  selectFieldText: { flex: 1, fontSize: 13, fontWeight: "800", color: "#2C3E50", marginRight: 10 },
+  selectFieldChevron: { fontSize: 18, fontWeight: "900", color: "#2E7D32" },
 
   checkboxRowAdd: { flexDirection: "row", alignItems: "center", marginTop: 2, marginBottom: 14 },
   checkboxAdd: {
@@ -2245,6 +2589,33 @@ const styles = StyleSheet.create({
   checkboxAddChecked: { backgroundColor: "#2E7D32", borderColor: "#2E7D32" },
   checkboxTick: { color: "#FFF", fontSize: 12, fontWeight: "900" },
   checkboxTextAdd: { flex: 1, fontSize: 12, color: "#444" },
+
+  // ✅ NEW: Photo picker styles
+  photoPickBtn: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#2E7D32",
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 6
+  },
+  photoPickBtnText: { color: "#2E7D32", fontWeight: "900" },
+
+  photoThumbWrap: { marginRight: 10, position: "relative" },
+  photoThumb: { width: 90, height: 90, borderRadius: 10, backgroundColor: "#DDD" },
+  photoRemoveBtn: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#F44336",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  photoRemoveText: { color: "#FFF", fontWeight: "900", fontSize: 12 },
 
   addSubmitBtn: { backgroundColor: "#2E7D32", paddingVertical: 12, borderRadius: 10, alignItems: "center", marginTop: 6 },
   addSubmitBtnText: { color: "#FFF", fontWeight: "900" },
@@ -2350,5 +2721,3 @@ const styles = StyleSheet.create({
   viewerScaleText: { color: "#FFF", fontWeight: "900" },
   viewerHint: { color: "rgba(255,255,255,0.75)", fontSize: 12, textAlign: "center", marginBottom: 10 }
 });
-
-

@@ -1,4 +1,3 @@
-// Login.js
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -99,7 +98,7 @@ export default function Login({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loginNotice, setLoginNotice] = useState("");
 
-  // ✅ UI focus + error highlight
+  // UI focus + error highlight
   const [focusedField, setFocusedField] = useState(null); // "email" | "password" | null
   const [fieldErrors, setFieldErrors] = useState({ email: false, password: false });
 
@@ -216,7 +215,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // ✅ Send 2FA login code via PHP backend (OPTIONAL)
+  // Send 2FA login code via PHP backend (OPTIONAL)
   const sendTwoFACodeToEmail = async (userEmail, userDocId) => {
     try {
       const code = generateVerificationCode();
@@ -255,14 +254,15 @@ export default function Login({ navigation }) {
     }
   };
 
-  // Role routing
-  const navigateByRoleAndTask = (roleValue, adminTaskRoleValue = "") => {
+  // UPDATED Role routing (Admin unified tabs)
+  const navigateByRoleAndTask = (roleValue) => {
     if (roleValue === "Rider") {
       navigation.replace("HomeRider");
       return;
     }
-    const task = (adminTaskRoleValue || "processing").toLowerCase();
-    navigation.replace("HomeAdmin", { adminTaskRole: task });
+
+    // All Admin types go to the same HomeAdmin now
+    navigation.replace("HomeAdmin");
   };
 
   // Verify email code
@@ -325,7 +325,7 @@ export default function Login({ navigation }) {
         // If 2FA is OFF, proceed directly
         Alert.alert("Success", "Email verified!");
         setTimeout(() => {
-          navigateByRoleAndTask(tempUserRole, computedTaskRole || tempAdminTaskRole);
+          navigateByRoleAndTask(tempUserRole);
         }, 400);
         return;
       } else {
@@ -397,7 +397,7 @@ export default function Login({ navigation }) {
 
         Alert.alert("Success", "Login successful!");
         setTimeout(() => {
-          navigateByRoleAndTask(tempUserRole, computedTaskRole || tempAdminTaskRole);
+          navigateByRoleAndTask(tempUserRole);
         }, 400);
       } else {
         Alert.alert("Invalid Code", "The login code you entered is incorrect.");
@@ -409,7 +409,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // ✅ REAL resend for 2FA (ONLY IF enabled)
+  // REAL resend for 2FA (ONLY IF enabled)
   const handleResend2FA = async () => {
     if (isVerifying2FA) return;
     if (twoFAResendCountdown > 0) return;
@@ -556,14 +556,14 @@ export default function Login({ navigation }) {
       // If 2FA is OFF, proceed directly
       Alert.alert("Success", "Login successful!");
       setTimeout(() => {
-        navigateByRoleAndTask(detectedRole, detectedAdminTaskRole);
+        navigateByRoleAndTask(detectedRole);
       }, 400);
       return;
     } catch (error) {
       const friendly = getFriendlyAuthMessage(error?.code);
       setLoginNotice(friendly);
 
-      // ✅ highlight both fields on auth failure (wrong password/user not found/etc.)
+      // highlight both fields on auth failure (wrong password/user not found/etc.)
       setFieldErrors({ email: true, password: true });
     } finally {
       setIsLoading(false);
@@ -599,7 +599,7 @@ export default function Login({ navigation }) {
           <View style={styles.bgBlobOne} />
           <View style={styles.bgBlobTwo} />
 
-          {/* ✅ Centered header */}
+          {/* Centered header */}
           <View style={styles.headerWrap}>
             <Text style={styles.welcome}>Welcome to</Text>
             <Text style={styles.aide}>A.I.D.E BIÑAN</Text>
@@ -615,7 +615,7 @@ export default function Login({ navigation }) {
             </View>
 
             <View style={styles.whiteCard}>
-              {/* ✅ Better form title */}
+              {/* Better form title */}
               <Text style={styles.formTitle}>Sign in</Text>
               <Text style={styles.formSubtitle}>Login to continue</Text>
 
@@ -888,7 +888,7 @@ const styles = StyleSheet.create({
     zIndex: 0
   },
 
-  // ✅ background blobs for nicer UI
+  // background blobs for nicer UI
   bgBlobOne: {
     position: "absolute",
     width: 260,
@@ -910,7 +910,7 @@ const styles = StyleSheet.create({
     zIndex: 1
   },
 
-  // ✅ centered header
+  // centered header
   headerWrap: {
     width: "100%",
     paddingHorizontal: 26,
@@ -919,17 +919,17 @@ const styles = StyleSheet.create({
     zIndex: 5
   },
 
-  // ✅ UPDATED: bigger header text
+  // bigger header text
   welcome: {
     color: "#EAF7EE",
-    fontSize: 26, // ✅ bigger
+    fontSize: 26, // bigger
     fontWeight: "800",
     textAlign: "center",
     letterSpacing: 0.5
   },
   aide: {
     color: "#FFFFFF",
-    fontSize: 22, // ✅ bigger
+    fontSize: 22, // bigger
     fontWeight: "900",
     marginTop: 6,
     textAlign: "center",
@@ -959,7 +959,7 @@ const styles = StyleSheet.create({
     paddingTop: 68,
     paddingBottom: 28,
 
-    // ✅ cleaner card (border + shadow)
+    // cleaner card (border + shadow)
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.35)",
 
@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
     elevation: 10
   },
 
-  // ✅ small title inside card
+  // Small title inside card
   formTitle: {
     fontSize: 18,
     fontWeight: "900",

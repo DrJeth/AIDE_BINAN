@@ -38,6 +38,15 @@ const db = getFirestore();
 
 const MAX_GOV_ID_IMAGES = 3;
 
+// e-bike photos + category options
+const MAX_EBIKE_PHOTOS = 3;
+const EBIKE_CATEGORIES = [
+  { label: "CATEGORY L1A", value: "L1A" },
+  { label: "CATEGORY L1B", value: "L1B" },
+  { label: "CATEGORY L2A", value: "L2A" },
+  { label: "CATEGORY L2B", value: "L2B" },
+];
+
 function RegisterRider({ navigation }) {
   const [activeSection, setActiveSection] = useState("personal");
 
@@ -65,6 +74,10 @@ function RegisterRider({ navigation }) {
     chassisMotorNumber: "",
     branch: "",
     plateNumber: "",
+
+    // category + local photo URIs (for current entry)
+    ebikeCategorySelected: "",
+    ebikePhotos: [],
 
     // account fields
     email: "",
@@ -187,6 +200,55 @@ function RegisterRider({ navigation }) {
     setGovIdImages((prev) => (prev || []).filter((x) => x !== uri));
   };
 
+  // pick e-bike photos (local uris)
+  const pickEbikePhotos = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Camera roll permissions required");
+        return;
+      }
+
+      const current = form.ebikePhotos || [];
+      const remaining = MAX_EBIKE_PHOTOS - current.length;
+
+      if (remaining <= 0) {
+        Alert.alert(
+          "Limit reached",
+          `You can upload up to ${MAX_EBIKE_PHOTOS} photos only.`
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.7,
+        base64: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const newUris = result.assets.map((a) => a.uri).filter(Boolean);
+        update(
+          "ebikePhotos",
+          [...current, ...newUris].slice(0, MAX_EBIKE_PHOTOS)
+        );
+        clearError("ebikePhotos");
+      }
+    } catch (e) {
+      console.error("pickEbikePhotos error:", e);
+      Alert.alert("Error", "Could not pick e-bike photos.");
+    }
+  };
+
+  const removeEbikePhoto = (uri) => {
+    const current = form.ebikePhotos || [];
+    update(
+      "ebikePhotos",
+      (current || []).filter((x) => x !== uri)
+    );
+  };
+
   // upload gov ID images to Storage + return URLs
   const uploadGovIdImages = async (userId, imageUris) => {
     if (!imageUris || imageUris.length === 0) return [];
@@ -233,6 +295,53 @@ function RegisterRider({ navigation }) {
     return urls;
   };
 
+  // upload ebike photos to Storage + return URLs
+  const uploadEbikePhotos = async (userId, ebikeId, imageUris) => {
+    if (!imageUris || imageUris.length === 0) return [];
+
+    const urls = [];
+    for (let i = 0; i < imageUris.length; i++) {
+      const uri = imageUris[i];
+      try {
+        const res = await fetch(uri);
+        if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+        const blob = await res.blob();
+
+        const ts = Date.now();
+        const rnd = Math.random().toString(36).slice(2, 8);
+        const path = `rider_ebike_photos/${userId}/${ebikeId}/${ts}_${i}_${rnd}.jpg`;
+
+        const storageRef = ref(storage, path);
+
+        const uploadTask = uploadBytesResumable(storageRef, blob, {
+          contentType: "image/jpeg",
+          customMetadata: {
+            uploadedBy: "rider",
+            riderId: userId,
+            docType: "ebike_photo",
+            ebikeId,
+          },
+        });
+
+        await new Promise((resolve, reject) => {
+          uploadTask.on(
+            "state_changed",
+            () => {},
+            (error) => reject(error),
+            () => resolve(uploadTask.snapshot)
+          );
+        });
+
+        const downloadURL = await getDownloadURL(storageRef);
+        urls.push(downloadURL);
+      } catch (err) {
+        console.error(`E-bike photo upload failed [${i}]`, err);
+      }
+    }
+
+    return urls;
+  };
+
   // Validation Functions
   const validateEmail = (email) => {
     const normalized = (email || "").trim().toLowerCase();
@@ -262,7 +371,10 @@ function RegisterRider({ navigation }) {
 
     if (!p.trim()) return { ok: false, message: "Please fill in Password" };
     if (p.length < 8)
-      return { ok: false, message: "Password must be at least 8 characters long" };
+      return {
+        ok: false,
+        message: "Password must be at least 8 characters long",
+      };
     if (p.length > 64)
       return { ok: false, message: "Password must be at most 64 characters long" };
     if (/\s/.test(p))
@@ -316,10 +428,7 @@ function RegisterRider({ navigation }) {
     const today = new Date();
     const age = today.getFullYear() - birthday.getFullYear();
     const monthDiff = today.getMonth() - birthday.getMonth();
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthday.getDate())
-    ) {
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthday.getDate())) {
       return age - 1;
     }
     return age;
@@ -413,6 +522,8 @@ function RegisterRider({ navigation }) {
       "ebikeColor",
       "chassisMotorNumber",
       "plateNumber",
+      "ebikeCategorySelected",
+      "ebikePhotos",
     ];
 
     const err = {};
@@ -456,6 +567,17 @@ function RegisterRider({ navigation }) {
           "Plate Number must be in format: 2 letters followed by 4 numbers (e.g., AB1234)"
         );
       }
+    }
+
+    // NEW required fields
+    if (!form.ebikeCategorySelected?.trim()) {
+      err.ebikeCategorySelected = true;
+      messages.push("Please select E-Bike Category");
+    }
+
+    if (!form.ebikePhotos || form.ebikePhotos.length === 0) {
+      err.ebikePhotos = true;
+      messages.push("Please upload at least 1 E-Bike photo");
     }
 
     setSectionErrors(sectionKeys, err);
@@ -517,6 +639,8 @@ function RegisterRider({ navigation }) {
     update("chassisMotorNumber", "");
     update("branch", "");
     update("plateNumber", "");
+    update("ebikeCategorySelected", "");
+    update("ebikePhotos", []);
     setNoPlateNumber(false);
     setEditingEbikeId(null);
 
@@ -529,6 +653,8 @@ function RegisterRider({ navigation }) {
         "ebikeColor",
         "chassisMotorNumber",
         "plateNumber",
+        "ebikeCategorySelected",
+        "ebikePhotos",
       ].forEach((k) => delete next[k]);
       return next;
     });
@@ -549,6 +675,8 @@ function RegisterRider({ navigation }) {
       chassisMotorNumber: item?.chassisMotorNumber || "",
       branch: item?.branch || "",
       plateNumber: hasPlate ? (item?.plateNumber || "") : "",
+      ebikeCategorySelected: item?.ebikeCategorySelected || "",
+      ebikePhotos: item?.ebikePhotoUris || [],
     }));
 
     //clear errors when editing existing
@@ -560,6 +688,8 @@ function RegisterRider({ navigation }) {
         "ebikeColor",
         "chassisMotorNumber",
         "plateNumber",
+        "ebikeCategorySelected",
+        "ebikePhotos",
       ].forEach((k) => delete next[k]);
       return next;
     });
@@ -600,6 +730,10 @@ function RegisterRider({ navigation }) {
       branch: (form.branch || "").trim().toUpperCase(),
       plateNumber: plate,
       hasPlate: !noPlateNumber,
+
+      // NEW
+      ebikeCategorySelected: (form.ebikeCategorySelected || "").trim(),
+      ebikePhotoUris: form.ebikePhotos || [], // local URIs (i-uupload sa submit)
     };
 
     if (editingEbikeId) {
@@ -618,7 +752,6 @@ function RegisterRider({ navigation }) {
       ...payload,
 
       status: "Pending",
-      ebikeCategorySelected: "",
       registeredDate: null,
       renewalDate: null,
       registrationStatus: null,
@@ -676,6 +809,10 @@ function RegisterRider({ navigation }) {
         branch: (form.branch || "").trim().toUpperCase(),
         plateNumber: plate,
         hasPlate: !noPlateNumber,
+
+        // NEW
+        ebikeCategorySelected: (form.ebikeCategorySelected || "").trim(),
+        ebikePhotoUris: form.ebikePhotos || [],
       };
 
       ebikesToSave = ebikesToSave.map((e) =>
@@ -688,7 +825,9 @@ function RegisterRider({ navigation }) {
         (form.ebikeColor || "").trim() ||
         (form.chassisMotorNumber || "").trim() ||
         (form.branch || "").trim() ||
-        (form.plateNumber || "").trim();
+        (form.plateNumber || "").trim() ||
+        (form.ebikeCategorySelected || "").trim() ||
+        (form.ebikePhotos || []).length > 0;
 
       if (hasCurrentEbikeSomething) {
         if (!validateCurrentEbikeEntry()) return;
@@ -720,8 +859,11 @@ function RegisterRider({ navigation }) {
           plateNumber: plate,
           hasPlate: !noPlateNumber,
 
+          // NEW
+          ebikeCategorySelected: (form.ebikeCategorySelected || "").trim(),
+          ebikePhotoUris: form.ebikePhotos || [],
+
           status: "Pending",
-          ebikeCategorySelected: "",
           registeredDate: null,
           renewalDate: null,
           registrationStatus: null,
@@ -788,7 +930,10 @@ function RegisterRider({ navigation }) {
           return;
         }
 
-        const legacyQ = query(collection(db, "users"), where("plateNumber", "==", p));
+        const legacyQ = query(
+          collection(db, "users"),
+          where("plateNumber", "==", p)
+        );
         const legacySnap = await getDocs(legacyQ);
         if (!legacySnap.empty) {
           Alert.alert("Error", `Plate number already registered: ${p}`);
@@ -845,6 +990,42 @@ function RegisterRider({ navigation }) {
           createdAt: serverTimestamp(),
         });
       }
+
+      // upload E-bike photos per ebike + save to riderRegistrations images too
+      const ebikeUploadedList = [];
+      for (let i = 0; i < ebikesToSave.length; i++) {
+        const eb = ebikesToSave[i];
+        const ebikeId = eb.id || makeEbikeId();
+
+        const localUris = eb.ebikePhotoUris || [];
+        const uploadedUrls = await uploadEbikePhotos(userId, ebikeId, localUris);
+
+        if (!uploadedUrls || uploadedUrls.length === 0) {
+          Alert.alert(
+            "Upload Failed",
+            "E-Bike photo upload is required. Please try again."
+          );
+          setLoading(false);
+          return;
+        }
+
+        // also store in riderRegistrations/{uid}/images (same place style as pending list)
+        for (const url of uploadedUrls) {
+          await addDoc(imgCol, {
+            url,
+            type: "original",
+            docType: "ebike_photo",
+            ebikeId,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        const cleaned = { ...eb, id: ebikeId, ebikePhotoUrls: uploadedUrls };
+        delete cleaned.ebikePhotoUris; // remove local-only uris
+        ebikeUploadedList.push(cleaned);
+      }
+
+      ebikesToSave = ebikeUploadedList;
 
       const firstPlate = plates[0] || "";
       const firstEbike = ebikesToSave[0] || null;
@@ -1023,12 +1204,7 @@ function RegisterRider({ navigation }) {
         <Text style={styles.fieldLabel}>
           Contact Number<Text style={styles.requiredStar}> *</Text>
         </Text>
-        <View
-          style={[
-            styles.inputCard,
-            errors.contactNumber && styles.inputCardError,
-          ]}
-        >
+        <View style={[styles.inputCard, errors.contactNumber && styles.inputCardError]}>
           <TextInput
             style={styles.input}
             placeholder="09XXXXXXXXX"
@@ -1139,6 +1315,16 @@ function RegisterRider({ navigation }) {
               </Text>
               <Text style={styles.ebikeLine}>
                 <Text style={styles.ebikeLabel}>Branch:</Text> {e.branch || "-"}
+              </Text>
+              <Text style={styles.ebikeLine}>
+                <Text style={styles.ebikeLabel}>Category:</Text>{" "}
+                {e.ebikeCategorySelected || "-"}
+              </Text>
+              <Text style={styles.ebikeLine}>
+                <Text style={styles.ebikeLabel}>Photos:</Text>{" "}
+                {(e.ebikePhotoUris?.length || 0) > 0
+                  ? `${e.ebikePhotoUris.length} uploaded`
+                  : "0"}
               </Text>
 
               <View style={styles.cardActions}>
@@ -1295,6 +1481,89 @@ function RegisterRider({ navigation }) {
               don&apos;t have a plate number yet.
             </Text>
           </View>
+        </View>
+
+        {/* E-Bike Category */}
+        <View style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>
+            E-Bike Category<Text style={styles.requiredStar}> *</Text>
+          </Text>
+
+          <View
+            style={[
+              styles.inputCard,
+              errors.ebikeCategorySelected && styles.inputCardError,
+            ]}
+          >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {EBIKE_CATEGORIES.map((c) => {
+                const selected = form.ebikeCategorySelected === c.value;
+                return (
+                  <TouchableOpacity
+                    key={c.value}
+                    style={[
+                      styles.categoryPill,
+                      selected && styles.categoryPillSelected,
+                    ]}
+                    onPress={() => !loading && update("ebikeCategorySelected", c.value)}
+                    disabled={loading}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        selected && styles.categoryPillTextSelected,
+                      ]}
+                    >
+                      {c.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* ✅ NEW: Upload E-Bike Photos */}
+        <View style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>
+            Upload E-Bike Photo<Text style={styles.requiredStar}> *</Text>
+          </Text>
+
+          <View style={[styles.inputCard, errors.ebikePhotos && styles.inputCardError]}>
+            <TouchableOpacity
+              style={[styles.uploadBtn, loading && styles.buttonDisabled]}
+              onPress={pickEbikePhotos}
+              disabled={loading}
+            >
+              <Text style={styles.uploadBtnText}>
+                {(form.ebikePhotos?.length || 0) > 0
+                  ? "Add / Change E-Bike Photos"
+                  : "Upload E-Bike Photos"}
+              </Text>
+              <Text style={styles.uploadBtnSub}>Max {MAX_EBIKE_PHOTOS} photos</Text>
+            </TouchableOpacity>
+
+            {(form.ebikePhotos?.length || 0) > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {form.ebikePhotos.map((uri, idx) => (
+                  <View key={`${uri}_${idx}`} style={styles.thumbWrap}>
+                    <Image source={{ uri }} style={styles.thumbImg} />
+                    <TouchableOpacity
+                      style={styles.thumbRemove}
+                      onPress={() => removeEbikePhoto(uri)}
+                      disabled={loading}
+                    >
+                      <Text style={styles.thumbRemoveText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          <Text style={styles.helpText}>
+            Upload a clear photo of your e-bike (front/side/back).
+          </Text>
         </View>
 
         <TouchableOpacity
@@ -1677,7 +1946,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // Gov ID upload styles
+  // Gov ID upload styles (reused for ebike photos too)
   uploadBtn: {
     backgroundColor: "#E6F3EC",
     borderRadius: 10,
@@ -1721,6 +1990,29 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 14,
     lineHeight: 16,
+  },
+
+  // category pill styles
+  categoryPill: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CFE8D6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginRight: 8,
+  },
+  categoryPillSelected: {
+    backgroundColor: "#2E7D32",
+    borderColor: "#2E7D32",
+  },
+  categoryPillText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#2E7D32",
+  },
+  categoryPillTextSelected: {
+    color: "#FFFFFF",
   },
 });
 
