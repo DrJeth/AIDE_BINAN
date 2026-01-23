@@ -2657,12 +2657,15 @@ const RiderScreen = ({ navigation, route }) => {
                 setSearchQuery('');
               }}
             >
+              {/* ✅ FIX: allow full label (wrap + fit) */}
               <Text
                 style={[
                   styles.tabText,
                   activeTab === tab && styles.activeTabText
                 ]}
-                numberOfLines={1}
+                numberOfLines={2}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
               >
                 {tab}
               </Text>
@@ -2833,17 +2836,21 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'android' ? { includeFontPadding: false } : {})
   },
 
+  /* ✅ FIXED TAB STYLES (show full label) */
   tabContainer: {
     flexDirection: 'row',
     marginTop: 15 * RESPONSIVE.height,
-    marginHorizontal: 15 * RESPONSIVE.width
+    marginHorizontal: 15 * RESPONSIVE.width,
+    alignItems: 'flex-end',
   },
   tab: {
     flex: 1,
-    padding: 10 * RESPONSIVE.height,
+    paddingVertical: 8 * RESPONSIVE.height,
+    paddingHorizontal: 4 * RESPONSIVE.width,
     alignItems: 'center',
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent'
+    borderBottomColor: 'transparent',
+    minHeight: 44 * RESPONSIVE.height,
   },
   activeTab: {
     borderBottomColor: '#2E7D32'
@@ -2851,7 +2858,10 @@ const styles = StyleSheet.create({
   tabText: {
     color: '#7F8C8D',
     fontWeight: '600',
-    fontSize: 12
+    fontSize: 12 * RESPONSIVE.width,
+    textAlign: 'center',
+    flexShrink: 1,
+    lineHeight: 14 * RESPONSIVE.width,
   },
   activeTabText: {
     color: '#2E7D32'
