@@ -421,6 +421,51 @@ const RiderScreen = ({ navigation, route }) => {
   const [editChassisMotorNumber, setEditChassisMotorNumber] = useState('');
   const [editBranch, setEditBranch] = useState('');
 
+  /* =========================
+     ✅ NEW: CAPS + REQUIRED VALIDATION HELPERS
+  ========================= */
+  const toUpperText = (v) => (v ?? '').toString().toUpperCase();
+  const trimUpper = (v) => toUpperText(v).trim();
+  const trimOnly = (v) => (v ?? '').toString().trim();
+
+  // validate required personal + ebike fields (used for Pending & Pending Compliance actions)
+  const getMissingPersonalAndEbikeFields = () => {
+    const missing = [];
+
+    // Personal
+    if (!trimUpper(editFirstName)) missing.push('First Name');
+    if (!trimUpper(editLastName)) missing.push('Last Name');
+    if (!trimOnly(editContactNumber)) missing.push('Contact No.');
+    const bday = trimOnly(editBirthday);
+    if (!bday) missing.push('Birthday');
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(bday)) missing.push('Birthday (YYYY-MM-DD)');
+    if (!trimUpper(editAddress)) missing.push('Address');
+
+    // E-bike
+    if (!trimUpper(editChassisMotorNumber)) missing.push('Chassis/Motor No.');
+    if (!trimUpper(editEbikeBrand)) missing.push('E-bike Brand');
+    if (!trimUpper(editEbikeModel)) missing.push('E-bike Model');
+    if (!trimUpper(editEbikeColor)) missing.push('E-bike Color');
+    if (!trimUpper(editBranch)) missing.push('Branch');
+
+    return missing;
+  };
+
+  const assertPersonalAndEbikeNotBlank = () => {
+    // only enforce when editable section is enabled
+    if (!canEditPersonalAndEbike) return true;
+
+    const missing = getMissingPersonalAndEbikeFields();
+    if (missing.length > 0) {
+      Alert.alert(
+        'Required Fields',
+        `Bawal blank. Please complete:\n\n• ${missing.join('\n• ')}`
+      );
+      return false;
+    }
+    return true;
+  };
+
   const openImageViewer = (url) => {
     const u = (url || '').toString().trim();
     if (!u) return;
@@ -768,19 +813,19 @@ const RiderScreen = ({ navigation, route }) => {
     setPaymentStatus(normalizePaymentStatus(ebike?.paymentDetails));
     setManualPlateNumber(ebike?.plateNumber ? String(ebike.plateNumber).toUpperCase() : '');
 
-    // editable personal info
-    setEditFirstName((rider?.personalInfo?.firstName || '').toString());
-    setEditLastName((rider?.personalInfo?.lastName || '').toString());
+    // ✅ editable personal info (AUTO CAPS)
+    setEditFirstName(toUpperText(rider?.personalInfo?.firstName || '').toString());
+    setEditLastName(toUpperText(rider?.personalInfo?.lastName || '').toString());
     setEditContactNumber((rider?.personalInfo?.contactNumber || '').toString());
     setEditBirthday(birthdayToInput(rider?.personalInfo?.birthday));
-    setEditAddress((rider?.personalInfo?.address || '').toString());
+    setEditAddress(toUpperText(rider?.personalInfo?.address || '').toString());
 
-    // editable e-bike info
-    setEditEbikeBrand((ebike?.ebikeBrand || '').toString());
-    setEditEbikeModel((ebike?.ebikeModel || '').toString());
-    setEditEbikeColor((ebike?.ebikeColor || '').toString());
-    setEditChassisMotorNumber((ebike?.chassisMotorNumber || '').toString());
-    setEditBranch((ebike?.branch || '').toString());
+    // ✅ editable e-bike info (AUTO CAPS)
+    setEditEbikeBrand(toUpperText(ebike?.ebikeBrand || '').toString());
+    setEditEbikeModel(toUpperText(ebike?.ebikeModel || '').toString());
+    setEditEbikeColor(toUpperText(ebike?.ebikeColor || '').toString());
+    setEditChassisMotorNumber(toUpperText(ebike?.chassisMotorNumber || '').toString());
+    setEditBranch(toUpperText(ebike?.branch || '').toString());
 
     const incomingChecklist = ebike?.inspection?.checklist || {};
     setInspectionChecklist(normalizeChecklistDefaults(incomingChecklist));
@@ -1310,6 +1355,9 @@ const RiderScreen = ({ navigation, route }) => {
         return;
       }
 
+      // ✅ NEW: required personal+ebike info (bawal blank) + CAPS enforced via inputs
+      if (!assertPersonalAndEbikeNotBlank()) return;
+
       if (!selectedCategory) {
         Alert.alert('Error', 'Please select an E-Bike Category');
         return;
@@ -1402,11 +1450,11 @@ const RiderScreen = ({ navigation, route }) => {
         };
 
         const userPersonalUpdates = (activeTab === STATUS.PENDING && canEditPersonalAndEbike) ? {
-          firstName: (editFirstName || '').toString().trim(),
-          lastName: (editLastName || '').toString().trim(),
-          contactNumber: (editContactNumber || '').toString().trim(),
+          firstName: trimUpper(editFirstName),
+          lastName: trimUpper(editLastName),
+          contactNumber: trimOnly(editContactNumber),
           birthday: parseBirthdayForSave(editBirthday),
-          address: (editAddress || '').toString().trim(),
+          address: trimUpper(editAddress),
         } : null;
 
         normalized[idx] = {
@@ -1414,11 +1462,11 @@ const RiderScreen = ({ navigation, route }) => {
           status: STATUS.INSPECT,
 
           ...(activeTab === STATUS.PENDING && canEditPersonalAndEbike ? {
-            ebikeBrand: (editEbikeBrand || '').toString().trim(),
-            ebikeModel: (editEbikeModel || '').toString().trim(),
-            ebikeColor: (editEbikeColor || '').toString().trim(),
-            chassisMotorNumber: (editChassisMotorNumber || '').toString().trim(),
-            branch: (editBranch || '').toString().trim(),
+            ebikeBrand: trimUpper(editEbikeBrand),
+            ebikeModel: trimUpper(editEbikeModel),
+            ebikeColor: trimUpper(editEbikeColor),
+            chassisMotorNumber: trimUpper(editChassisMotorNumber),
+            branch: trimUpper(editBranch),
           } : {}),
 
           ebikeCategorySelected: selectedCategory,
@@ -1485,6 +1533,9 @@ const RiderScreen = ({ navigation, route }) => {
         Alert.alert('Error', 'No rider / e-bike selected');
         return;
       }
+
+      // ✅ NEW: required personal+ebike info (bawal blank)
+      if (!assertPersonalAndEbikeNotBlank()) return;
 
       const failedKeysFromRecord = Array.isArray(selectedEbike?.inspectionFailedKeys)
         ? selectedEbike.inspectionFailedKeys.filter(Boolean)
@@ -1612,11 +1663,11 @@ const RiderScreen = ({ navigation, route }) => {
         };
 
         const userPersonalUpdates = canEditPersonalAndEbike ? {
-          firstName: (editFirstName || '').toString().trim(),
-          lastName: (editLastName || '').toString().trim(),
-          contactNumber: (editContactNumber || '').toString().trim(),
+          firstName: trimUpper(editFirstName),
+          lastName: trimUpper(editLastName),
+          contactNumber: trimOnly(editContactNumber),
           birthday: parseBirthdayForSave(editBirthday),
-          address: (editAddress || '').toString().trim(),
+          address: trimUpper(editAddress),
         } : null;
 
         // update checklist only for failed keys
@@ -1645,11 +1696,11 @@ const RiderScreen = ({ navigation, route }) => {
           ...old,
 
           ...(canEditPersonalAndEbike ? {
-            ebikeBrand: (editEbikeBrand || '').toString().trim(),
-            ebikeModel: (editEbikeModel || '').toString().trim(),
-            ebikeColor: (editEbikeColor || '').toString().trim(),
-            chassisMotorNumber: (editChassisMotorNumber || '').toString().trim(),
-            branch: (editBranch || '').toString().trim(),
+            ebikeBrand: trimUpper(editEbikeBrand),
+            ebikeModel: trimUpper(editEbikeModel),
+            ebikeColor: trimUpper(editEbikeColor),
+            chassisMotorNumber: trimUpper(editChassisMotorNumber),
+            branch: trimUpper(editBranch),
           } : {}),
 
           status: STATUS.REGISTERED,
@@ -1754,22 +1805,22 @@ const RiderScreen = ({ navigation, route }) => {
         if (idx === -1) throw new Error('Selected e-bike not found');
 
         const userPersonalUpdates = (activeTab === STATUS.PENDING && canEditPersonalAndEbike) ? {
-          firstName: (editFirstName || '').toString().trim(),
-          lastName: (editLastName || '').toString().trim(),
-          contactNumber: (editContactNumber || '').toString().trim(),
+          firstName: trimUpper(editFirstName),
+          lastName: trimUpper(editLastName),
+          contactNumber: trimOnly(editContactNumber),
           birthday: parseBirthdayForSave(editBirthday),
-          address: (editAddress || '').toString().trim(),
+          address: trimUpper(editAddress),
         } : null;
 
         normalized[idx] = {
           ...normalized[idx],
 
           ...(activeTab === STATUS.PENDING && canEditPersonalAndEbike ? {
-            ebikeBrand: (editEbikeBrand || '').toString().trim(),
-            ebikeModel: (editEbikeModel || '').toString().trim(),
-            ebikeColor: (editEbikeColor || '').toString().trim(),
-            chassisMotorNumber: (editChassisMotorNumber || '').toString().trim(),
-            branch: (editBranch || '').toString().trim(),
+            ebikeBrand: trimUpper(editEbikeBrand),
+            ebikeModel: trimUpper(editEbikeModel),
+            ebikeColor: trimUpper(editEbikeColor),
+            chassisMotorNumber: trimUpper(editChassisMotorNumber),
+            branch: trimUpper(editBranch),
           } : {}),
 
           status: STATUS.PENDING_COMPLIANCE,
@@ -2060,10 +2111,22 @@ const RiderScreen = ({ navigation, route }) => {
           {canEditPersonalAndEbike ? (
             <>
               <Text style={styles.docsMiniLabel}>First Name</Text>
-              <TextInput style={styles.input} value={editFirstName} onChangeText={setEditFirstName} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editFirstName}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditFirstName(toUpperText(t))}
+                editable={!uploading}
+              />
 
               <Text style={styles.docsMiniLabel}>Last Name</Text>
-              <TextInput style={styles.input} value={editLastName} onChangeText={setEditLastName} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editLastName}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditLastName(toUpperText(t))}
+                editable={!uploading}
+              />
 
               <Text style={styles.docsMiniLabel}>Email (Read-only)</Text>
               <View style={[styles.input, { justifyContent: 'center' }]}>
@@ -2071,13 +2134,20 @@ const RiderScreen = ({ navigation, route }) => {
               </View>
 
               <Text style={styles.docsMiniLabel}>Contact No.</Text>
-              <TextInput style={styles.input} value={editContactNumber} onChangeText={setEditContactNumber} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editContactNumber}
+                keyboardType="phone-pad"
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditContactNumber(t)}
+                editable={!uploading}
+              />
 
               <Text style={styles.docsMiniLabel}>Birthday (YYYY-MM-DD)</Text>
               <TextInput
                 style={styles.input}
                 value={editBirthday}
-                onChangeText={setEditBirthday}
+                onChangeText={(t) => setEditBirthday(t)}
                 placeholder="e.g., 2001-09-18"
                 editable={!uploading}
               />
@@ -2086,7 +2156,8 @@ const RiderScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.input}
                 value={editAddress}
-                onChangeText={setEditAddress}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditAddress(toUpperText(t))}
                 editable={!uploading}
                 multiline
               />
@@ -2137,21 +2208,46 @@ const RiderScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.input}
                 value={editChassisMotorNumber}
-                onChangeText={setEditChassisMotorNumber}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditChassisMotorNumber(toUpperText(t))}
                 editable={!uploading}
               />
 
               <Text style={styles.docsMiniLabel}>Brand</Text>
-              <TextInput style={styles.input} value={editEbikeBrand} onChangeText={setEditEbikeBrand} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editEbikeBrand}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditEbikeBrand(toUpperText(t))}
+                editable={!uploading}
+              />
 
               <Text style={styles.docsMiniLabel}>Model</Text>
-              <TextInput style={styles.input} value={editEbikeModel} onChangeText={setEditEbikeModel} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editEbikeModel}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditEbikeModel(toUpperText(t))}
+                editable={!uploading}
+              />
 
               <Text style={styles.docsMiniLabel}>Color</Text>
-              <TextInput style={styles.input} value={editEbikeColor} onChangeText={setEditEbikeColor} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editEbikeColor}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditEbikeColor(toUpperText(t))}
+                editable={!uploading}
+              />
 
               <Text style={styles.docsMiniLabel}>Branch</Text>
-              <TextInput style={styles.input} value={editBranch} onChangeText={setEditBranch} editable={!uploading} />
+              <TextInput
+                style={styles.input}
+                value={editBranch}
+                autoCapitalize="characters"
+                onChangeText={(t) => setEditBranch(toUpperText(t))}
+                editable={!uploading}
+              />
 
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Category:</Text>
@@ -2415,8 +2511,6 @@ const RiderScreen = ({ navigation, route }) => {
                       <Feather name="chevron-down" size={20} color="#2E7D32" />
                     </TouchableOpacity>
 
-                    {/* Removed: Registration Dates title + hint (per request) */}
-
                     <TouchableOpacity
                       style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
                       onPress={() => pickImagesGeneric(setReceiptImages)}
@@ -2447,7 +2541,6 @@ const RiderScreen = ({ navigation, route }) => {
                     <>
                       {renderInspectorChecklist()}
 
-                      {/* Removed Reject button — Passed only */}
                       <View style={styles.modalButtons}>
                         <TouchableOpacity
                           style={[styles.modalButton, styles.verifyButton, uploading && styles.buttonDisabled]}
@@ -2465,7 +2558,6 @@ const RiderScreen = ({ navigation, route }) => {
                   {/* Pending tab buttons */}
                   {activeTab === STATUS.PENDING && (
                     <View style={styles.modalButtons}>
-                      {/* Removed "Move to Compliance" button — Send to Inspect only */}
                       <TouchableOpacity
                         style={[styles.modalButton, styles.verifyButton, uploading && styles.buttonDisabled]}
                         onPress={handleSendToInspect}

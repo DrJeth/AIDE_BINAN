@@ -59,34 +59,52 @@ const EBIKE_CATEGORIES = [
   { label: 'Category N3 (e-truck)', value: 'N3' }
 ];
 
-const formatDate = (dateValue) => {
-  if (!dateValue) return 'N/A';
-  try {
-    const date = new Date(dateValue?.toDate?.() || dateValue);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  } catch (e) {
-    return 'Invalid Date';
+/** ✅ FIX: normalize Firestore timestamps safely (Timestamp, {seconds,nanoseconds}, Date, string/number) */
+const toJSDate = (v) => {
+  if (!v) return null;
+
+  // Firestore Timestamp (has toDate)
+  if (typeof v?.toDate === "function") return v.toDate();
+
+  // Serialized timestamp: {seconds, nanoseconds}
+  if (typeof v === "object" && typeof v.seconds === "number") {
+    const ms = v.seconds * 1000 + (v.nanoseconds ? v.nanoseconds / 1e6 : 0);
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
   }
+
+  if (v instanceof Date) return v;
+
+  // number/string date
+  if (typeof v === "number" || typeof v === "string") {
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
+};
+
+/** ✅ FIX: safe formatters (no crash on Timestamp objects) */
+const formatDate = (dateValue) => {
+  const d = toJSDate(dateValue);
+  if (!d) return 'N/A';
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 };
 
 const formatDateTime = (dateValue) => {
-  if (!dateValue) return '';
-  try {
-    const date = new Date(dateValue?.toDate?.() || dateValue);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (e) {
-    return '';
-  }
+  const d = toJSDate(dateValue);
+  if (!d) return '';
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 const normalizePlate = (v = '') =>
@@ -163,12 +181,15 @@ const normalizeUserEbikes = (userData) => {
   }];
 };
 
+/** ✅ FIX: safe renewal date computation */
 const getRegistrationStatusFromEbike = (ebike) => {
-  if (!ebike?.renewalDate) return null;
+  const renewal = toJSDate(ebike?.renewalDate);
+  if (!renewal) return null;
 
   const today = new Date();
-  const renewalDate = new Date(ebike.renewalDate?.toDate?.() || ebike.renewalDate);
-  const daysUntilExpiry = Math.floor((renewalDate - today) / (1000 * 60 * 60 * 24));
+  const daysUntilExpiry = Math.floor(
+    (renewal.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
 
   if (daysUntilExpiry < 0) {
     return { status: 'Expired', daysLeft: 0, color: '#F44336' };
@@ -487,6 +508,7 @@ export default function HomeAdmin({ navigation }) {
       contactNumber: userData?.contactNumber || 'N/A',
       email: userData?.email || 'N/A',
       address: userData?.address || 'N/A',
+      // ✅ FIX: birthday may be Timestamp; keep raw but render with formatDate()
       birthday: userData?.birthday || 'N/A',
 
       status: ebikeStatus,
@@ -726,8 +748,9 @@ export default function HomeAdmin({ navigation }) {
 
                     <View style={[styles.detailRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
                       <Text style={styles.detailLabel}>Birthday:</Text>
+                      {/* ✅ FIX: never render Timestamp object directly */}
                       <Text style={styles.detailValue}>
-                        {selectedEbike.birthday || 'N/A'}
+                        {formatDate(selectedEbike.birthday)}
                       </Text>
                     </View>
                   </View>
